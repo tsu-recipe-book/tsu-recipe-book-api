@@ -7,12 +7,12 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum ErrorCode {
 
-    VALIDATION_ERROR("VALIDATION_ERROR"),
-    NOT_FOUND("NOT_FOUND"),
-    BJU_SUM_EXCEEDED("BJU_SUM_EXCEEDED"),
-    PRODUCT_IN_USE("PRODUCT_IN_USE"),
-    FLAG_NOT_AVAILABLE("FLAG_NOT_AVAILABLE"),
-    INTERNAL_ERROR("INTERNAL_ERROR");
+    VALIDATION_ERROR(400),
+    NOT_FOUND(404),
+    BJU_SUM_EXCEEDED(422),
+    PRODUCT_IN_USE(409),
+    FLAG_NOT_AVAILABLE(422),
+    INTERNAL_ERROR(500);
 
-    private final String code;
+    private final int code;
 }
