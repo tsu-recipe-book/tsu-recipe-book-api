@@ -1,0 +1,1211 @@
+openapi: 3.0.3
+info:
+  title: Книга рецептов API
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080/api/v1
+
+tags:
+  - name: Products
+    description: Управление продуктами
+  - name: Dishes
+    description: Управление блюдами
+
+paths:
+  /products:
+    get:
+      tags: [Products]
+      summary: Получить список продуктов
+      description: >
+        Возвращает список всех продуктов с поддержкой фильтрации,
+        поиска и сортировки.
+      operationId: getProducts
+      parameters:
+        - name: search
+          in: query
+          description: Поиск по подстроке в названии (не регистрозависимый)
+          required: false
+          schema:
+            type: string
+            example: "кур"
+
+        - name: category
+          in: query
+          description: Фильтр по категории продукта
+          required: false
+          schema:
+            $ref: '#/components/schemas/ProductCategory'
+
+        - name: cookingRequired
+          in: query
+          description: Фильтр по необходимости готовки
+          required: false
+          schema:
+            $ref: '#/components/schemas/CookingRequired'
+
+        - name: flags
+          in: query
+          description: >
+            Фильтр по дополнительным флагам. Можно передавать несколько значений.
+            Продукт должен иметь ВСЕ указанные флаги.
+          required: false
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/ProductFlag'
+          example: [vegan, gluten_free]
+
+        - name: sortBy
+          in: query
+          description: Поле для сортировки
+          required: false
+          schema:
+            type: string
+            enum: [name, calories, proteins, fats, carbohydrates]
+            default: name
+
+        - name: sortOrder
+          in: query
+          description: Направление сортировки
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+
+      responses:
+        '200':
+          description: Список продуктов успешно получен
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductListItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags: [Products]
+      summary: Создать новый продукт
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProductCreateRequest'
+      responses:
+        '201':
+          description: Продукт успешно создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /products/{productId}:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+
+    get:
+      tags: [Products]
+      summary: Получить продукт по ID
+      operationId: getProductById
+      responses:
+        '200':
+          description: Продукт найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Products]
+      summary: Обновить продукт
+      description: Полное обновление продукта. Все обязательные поля должны быть переданы.
+      operationId: updateProduct
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProductUpdateRequest'
+      responses:
+        '200':
+          description: Продукт успешно обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Products]
+      summary: Удалить продукт
+      description: >
+        Удаляет продукт. Если продукт используется хотя бы в одном блюде,
+        удаление невозможно — возвращается ошибка 409 со списком блюд.
+      operationId: deleteProduct
+      responses:
+        '204':
+          description: Продукт успешно удалён
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Невозможно удалить продукт — он используется в блюдах
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDeleteConflictError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /dishes/calculate-nutrition:
+    post:
+      tags: [Dishes]
+      summary: Рассчитать КБЖУ блюда по составу
+      description: >
+        Вспомогательный эндпоинт для автоматического расчёта калорийности,
+        белков, жиров и углеводов на порцию по составу блюда.
+        Используется при создании/редактировании блюда.
+      operationId: calculateDishNutrition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NutritionCalculateRequest'
+      responses:
+        '200':
+          description: КБЖУ успешно рассчитано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NutritionCalculateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Один или несколько продуктов из состава не найдены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /dishes:
+    get:
+      tags: [Dishes]
+      summary: Получить список блюд
+      description: >
+        Возвращает список всех блюд с поддержкой фильтрации и поиска.
+      operationId: getDishes
+      parameters:
+        - name: search
+          in: query
+          description: Поиск по подстроке в названии (не регистрозависимый)
+          required: false
+          schema:
+            type: string
+            example: "борщ"
+
+        - name: category
+          in: query
+          description: Фильтр по категории блюда
+          required: false
+          schema:
+            $ref: '#/components/schemas/DishCategory'
+
+        - name: flags
+          in: query
+          description: >
+            Фильтр по дополнительным флагам. Можно передавать несколько значений.
+            Блюдо должно иметь ВСЕ указанные флаги.
+          required: false
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/DishFlag'
+          example: [vegan]
+
+        - name: sortBy
+          in: query
+          description: Поле для сортировки
+          required: false
+          schema:
+            type: string
+            enum: [name, calories, proteins, fats, carbohydrates]
+            default: name
+
+        - name: sortOrder
+          in: query
+          description: Направление сортировки
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+
+      responses:
+        '200':
+          description: Список блюд успешно получен
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DishListItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags: [Dishes]
+      summary: Создать новое блюдо
+      description: >
+        Создаёт блюдо. Если в названии содержится макрос категории
+        (!десерт, !первое и т.д.), категория определяется автоматически,
+        а макрос удаляется из названия. При одновременном указании
+        макроса и поля category приоритет у поля category.
+      operationId: createDish
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DishCreateRequest'
+      responses:
+        '201':
+          description: Блюдо успешно создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dish'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /dishes/{dishId}:
+    parameters:
+      - $ref: '#/components/parameters/DishId'
+
+    get:
+      tags: [Dishes]
+      summary: Получить блюдо по ID
+      operationId: getDishById
+      responses:
+        '200':
+          description: Блюдо найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dish'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Dishes]
+      summary: Обновить блюдо
+      description: >
+        Полное обновление блюда. Все обязательные поля должны быть переданы.
+        При изменении состава КБЖУ пересчитывается автоматически,
+        но может быть скорректировано пользователем.
+      operationId: updateDish
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DishUpdateRequest'
+      responses:
+        '200':
+          description: Блюдо успешно обновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dish'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Dishes]
+      summary: Удалить блюдо
+      operationId: deleteDish
+      responses:
+        '204':
+          description: Блюдо успешно удалено
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+
+  parameters:
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      description: UUID продукта
+      schema:
+        type: string
+        format: uuid
+        example: "123e4567-e89b-12d3-a456-426614174000"
+
+    DishId:
+      name: dishId
+      in: path
+      required: true
+      description: UUID блюда
+      schema:
+        type: string
+        format: uuid
+        example: "987fbc97-4bed-5078-af07-9141ba07c9f3"
+
+  schemas:
+
+    ProductCategory:
+      type: string
+      description: Категория продукта
+      enum:
+        - frozen
+        - meat
+        - vegetables
+        - greens
+        - spices
+        - grains
+        - canned
+        - liquid
+        - sweets
+      example: vegetables
+
+    CookingRequired:
+      type: string
+      description: Степень готовности продукта к употреблению
+      enum:
+        - ready_to_eat
+        - semi_finished
+        - requires_cooking
+      example: requires_cooking
+
+    ProductFlag:
+      type: string
+      description: Дополнительный флаг продукта
+      enum:
+        - vegan
+        - gluten_free
+        - sugar_free
+
+    DishCategory:
+      type: string
+      description: Категория блюда
+      enum:
+        - dessert
+        - first
+        - second
+        - drink
+        - salad
+        - soup
+        - snack
+      example: soup
+
+    DishFlag:
+      type: string
+      description: Дополнительный флаг блюда
+      enum:
+        - vegan
+        - gluten_free
+        - sugar_free
+
+    NutritionInfo:
+      type: object
+      description: Базовые КБЖУ поля
+      properties:
+        calories:
+          type: number
+          format: float
+          minimum: 0
+          description: Калорийность
+          example: 52.0
+        proteins:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: Белки (г)
+          example: 0.3
+        fats:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: Жиры (г)
+          example: 0.2
+        carbohydrates:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: Углеводы (г)
+          example: 11.4
+
+    DishIngredient:
+      type: object
+      description: Запись о продукте в составе блюда
+      required:
+        - productId
+        - amount
+      properties:
+        productId:
+          type: string
+          format: uuid
+          description: UUID продукта
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        amount:
+          type: number
+          format: float
+          minimum: 0
+          exclusiveMinimum: true
+          description: Количество продукта в порции (г)
+          example: 150.0
+
+    DishIngredientDetailed:
+      type: object
+      description: Запись о продукте в составе блюда (с деталями продукта)
+      properties:
+        productId:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        productName:
+          type: string
+          example: "Куриное филе"
+        amount:
+          type: number
+          format: float
+          description: Количество продукта в порции (г)
+          example: 150.0
+        calories:
+          type: number
+          format: float
+          description: Калорийность продукта на 100г
+          example: 165.0
+        proteins:
+          type: number
+          format: float
+          description: Белки продукта на 100г
+          example: 31.0
+        fats:
+          type: number
+          format: float
+          description: Жиры продукта на 100г
+          example: 3.6
+        carbohydrates:
+          type: number
+          format: float
+          description: Углеводы продукта на 100г
+          example: 0.0
+
+    Product:
+      type: object
+      description: Полное представление продукта
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        name:
+          type: string
+          minLength: 2
+          example: "Куриное филе"
+        photos:
+          type: array
+          items:
+            type: string
+            description: URL изображения
+            example: "https://example.com/uploads/chicken.jpg"
+          maxItems: 5
+          nullable: true
+        calories:
+          type: number
+          format: float
+          minimum: 0
+          description: Калорийность на 100 г (ккал)
+          example: 165.0
+        proteins:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: Белки на 100 г (г)
+          example: 31.0
+        fats:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: Жиры на 100 г (г)
+          example: 3.6
+        carbohydrates:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: Углеводы на 100 г (г)
+          example: 0.0
+        composition:
+          type: string
+          nullable: true
+          description: Текстовое описание состава продукта
+          example: "Куриное филе 100%"
+        category:
+          $ref: '#/components/schemas/ProductCategory'
+        cookingRequired:
+          $ref: '#/components/schemas/CookingRequired'
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductFlag'
+          description: Дополнительные флаги продукта
+          example: [gluten_free]
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+          example: "2024-01-15T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+          example: "2024-06-20T14:00:00Z"
+
+    ProductListItem:
+      type: object
+      description: Краткое представление продукта для списка
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        name:
+          type: string
+          example: "Куриное филе"
+        photos:
+          type: array
+          items:
+            type: string
+          maxItems: 5
+          nullable: true
+          example: ["https://example.com/uploads/chicken.jpg"]
+        calories:
+          type: number
+          format: float
+          example: 165.0
+        proteins:
+          type: number
+          format: float
+          example: 31.0
+        fats:
+          type: number
+          format: float
+          example: 3.6
+        carbohydrates:
+          type: number
+          format: float
+          example: 0.0
+        category:
+          $ref: '#/components/schemas/ProductCategory'
+        cookingRequired:
+          $ref: '#/components/schemas/CookingRequired'
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductFlag'
+          example: []
+
+    ProductCreateRequest:
+      type: object
+      description: Тело запроса для создания продукта
+      required:
+        - name
+        - calories
+        - proteins
+        - fats
+        - carbohydrates
+        - category
+        - cookingRequired
+      properties:
+        name:
+          type: string
+          minLength: 2
+          example: "Куриное филе"
+        photos:
+          type: array
+          items:
+            type: string
+            format: binary
+            description: Файл изображения
+          maxItems: 5
+          description: Фотографии продукта (до 5 файлов)
+        calories:
+          type: number
+          format: float
+          minimum: 0
+          example: 165.0
+        proteins:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          example: 31.0
+        fats:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          example: 3.6
+        carbohydrates:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          example: 0.0
+        composition:
+          type: string
+          nullable: true
+          example: "Куриное филе 100%"
+        category:
+          $ref: '#/components/schemas/ProductCategory'
+        cookingRequired:
+          $ref: '#/components/schemas/CookingRequired'
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductFlag'
+          default: []
+          example: [gluten_free]
+
+    ProductUpdateRequest:
+      type: object
+      description: Тело запроса для обновления продукта (все обязательные поля)
+      required:
+        - name
+        - calories
+        - proteins
+        - fats
+        - carbohydrates
+        - category
+        - cookingRequired
+      properties:
+        name:
+          type: string
+          minLength: 2
+          example: "Куриное филе (охлаждённое)"
+        photos:
+          type: array
+          items:
+            type: string
+            format: binary
+          maxItems: 5
+          description: >
+            Новые фотографии. Если переданы — заменяют все предыдущие.
+        photosToKeep:
+          type: array
+          items:
+            type: string
+            description: URL уже загруженных фото, которые нужно оставить
+          maxItems: 5
+          description: >
+            URL существующих фотографий, которые нужно сохранить.
+            Суммарно photos + photosToKeep не должно превышать 5.
+        calories:
+          type: number
+          format: float
+          minimum: 0
+          example: 165.0
+        proteins:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          example: 31.0
+        fats:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          example: 3.6
+        carbohydrates:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          example: 0.0
+        composition:
+          type: string
+          nullable: true
+          example: "Куриное филе 100%"
+        category:
+          $ref: '#/components/schemas/ProductCategory'
+        cookingRequired:
+          $ref: '#/components/schemas/CookingRequired'
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductFlag'
+          example: [gluten_free]
+
+    Dish:
+      type: object
+      description: Полное представление блюда
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          example: "987fbc97-4bed-5078-af07-9141ba07c9f3"
+        name:
+          type: string
+          minLength: 2
+          example: "Борщ украинский"
+        photos:
+          type: array
+          items:
+            type: string
+            description: URL изображения
+          maxItems: 5
+          nullable: true
+          example: ["https://example.com/uploads/borsch.jpg"]
+        calories:
+          type: number
+          format: float
+          minimum: 0
+          description: Калорийность на порцию (ккал)
+          example: 320.5
+        proteins:
+          type: number
+          format: float
+          minimum: 0
+          description: Белки на порцию (г)
+          example: 18.2
+        fats:
+          type: number
+          format: float
+          minimum: 0
+          description: Жиры на порцию (г)
+          example: 12.4
+        carbohydrates:
+          type: number
+          format: float
+          minimum: 0
+          description: Углеводы на порцию (г)
+          example: 35.6
+        ingredients:
+          type: array
+          items:
+            $ref: '#/components/schemas/DishIngredientDetailed'
+          minItems: 1
+          description: Состав блюда с деталями продуктов
+        portionSize:
+          type: number
+          format: float
+          minimum: 0
+          exclusiveMinimum: true
+          description: Размер порции (г)
+          example: 400.0
+        category:
+          $ref: '#/components/schemas/DishCategory'
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/DishFlag'
+          description: Дополнительные флаги блюда
+          example: []
+        availableFlags:
+          type: array
+          items:
+            $ref: '#/components/schemas/DishFlag'
+          readOnly: true
+          description: >
+            Флаги, доступные для установки исходя из состава блюда.
+            Флаг доступен, если ВСЕ продукты в составе имеют этот флаг.
+          example: [gluten_free]
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+          example: "2024-01-15T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+          example: "2024-06-20T14:00:00Z"
+
+    DishListItem:
+      type: object
+      description: Краткое представление блюда для списка
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "987fbc97-4bed-5078-af07-9141ba07c9f3"
+        name:
+          type: string
+          example: "Борщ украинский"
+        photos:
+          type: array
+          items:
+            type: string
+          maxItems: 5
+          nullable: true
+          example: ["https://example.com/uploads/borsch.jpg"]
+        calories:
+          type: number
+          format: float
+          example: 320.5
+        proteins:
+          type: number
+          format: float
+          example: 18.2
+        fats:
+          type: number
+          format: float
+          example: 12.4
+        carbohydrates:
+          type: number
+          format: float
+          example: 35.6
+        portionSize:
+          type: number
+          format: float
+          example: 400.0
+        category:
+          $ref: '#/components/schemas/DishCategory'
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/DishFlag'
+          example: []
+
+    DishCreateRequest:
+      type: object
+      description: Тело запроса для создания блюда
+      required:
+        - name
+        - calories
+        - proteins
+        - fats
+        - carbohydrates
+        - ingredients
+        - portionSize
+        - category
+      properties:
+        name:
+          type: string
+          minLength: 2
+          description: >
+            Название блюда. Может содержать макрос категории:
+            !десерт, !первое, !второе, !напиток, !салат, !суп, !перекус.
+            Макрос будет удалён из названия после обработки.
+          example: "!суп Борщ украинский"
+        photos:
+          type: array
+          items:
+            type: string
+            format: binary
+          maxItems: 5
+          description: Фотографии блюда (до 5 файлов)
+        calories:
+          type: number
+          format: float
+          minimum: 0
+          description: Калорийность на порцию (ккал). Может быть результатом автоматического расчёта.
+          example: 320.5
+        proteins:
+          type: number
+          format: float
+          minimum: 0
+          description: Белки на порцию (г)
+          example: 18.2
+        fats:
+          type: number
+          format: float
+          minimum: 0
+          description: Жиры на порцию (г)
+          example: 12.4
+        carbohydrates:
+          type: number
+          format: float
+          minimum: 0
+          description: Углеводы на порцию (г)
+          example: 35.6
+        ingredients:
+          type: array
+          items:
+            $ref: '#/components/schemas/DishIngredient'
+          minItems: 1
+          description: Состав блюда
+        portionSize:
+          type: number
+          format: float
+          minimum: 0
+          exclusiveMinimum: true
+          description: Размер порции (г)
+          example: 400.0
+        category:
+          $ref: '#/components/schemas/DishCategory'
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/DishFlag'
+          default: []
+          description: >
+            Дополнительные флаги. Будут проигнорированы/сброшены,
+            если не соответствуют составу блюда.
+          example: []
+
+    DishUpdateRequest:
+      type: object
+      description: Тело запроса для обновления блюда
+      required:
+        - name
+        - calories
+        - proteins
+        - fats
+        - carbohydrates
+        - ingredients
+        - portionSize
+        - category
+      properties:
+        name:
+          type: string
+          minLength: 2
+          example: "Борщ украинский классический"
+        photos:
+          type: array
+          items:
+            type: string
+            format: binary
+          maxItems: 5
+        photosToKeep:
+          type: array
+          items:
+            type: string
+            description: URL уже загруженных фото, которые нужно оставить
+          maxItems: 5
+        calories:
+          type: number
+          format: float
+          minimum: 0
+          example: 320.5
+        proteins:
+          type: number
+          format: float
+          minimum: 0
+          example: 18.2
+        fats:
+          type: number
+          format: float
+          minimum: 0
+          example: 12.4
+        carbohydrates:
+          type: number
+          format: float
+          minimum: 0
+          example: 35.6
+        ingredients:
+          type: array
+          items:
+            $ref: '#/components/schemas/DishIngredient'
+          minItems: 1
+        portionSize:
+          type: number
+          format: float
+          minimum: 0
+          exclusiveMinimum: true
+          example: 400.0
+        category:
+          $ref: '#/components/schemas/DishCategory'
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/DishFlag'
+          example: []
+
+    NutritionCalculateRequest:
+      type: object
+      description: Запрос на расчёт КБЖУ по составу блюда
+      required:
+        - ingredients
+      properties:
+        ingredients:
+          type: array
+          items:
+            $ref: '#/components/schemas/DishIngredient'
+          minItems: 1
+          description: Состав блюда для расчёта
+
+    NutritionCalculateResponse:
+      type: object
+      description: Рассчитанные значения КБЖУ на порцию
+      properties:
+        calories:
+          type: number
+          format: float
+          description: Рассчитанная калорийность на порцию (ккал)
+          example: 320.5
+        proteins:
+          type: number
+          format: float
+          description: Рассчитанные белки на порцию (г)
+          example: 18.2
+        fats:
+          type: number
+          format: float
+          description: Рассчитанные жиры на порцию (г)
+          example: 12.4
+        carbohydrates:
+          type: number
+          format: float
+          description: Рассчитанные углеводы на порцию (г)
+          example: 35.6
+        availableFlags:
+          type: array
+          items:
+            $ref: '#/components/schemas/DishFlag'
+          description: >
+            Флаги, доступные для установки у блюда
+            исходя из переданного состава.
+          example: [gluten_free]
+
+    ErrorResponse:
+      type: object
+      description: Стандартный ответ об ошибке
+      properties:
+        code:
+          type: string
+          description: Машиночитаемый код ошибки
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          description: Человекочитаемое описание ошибки
+          example: "Сумма БЖУ на 100 грамм не может превышать 100"
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: "proteins"
+              message:
+                type: string
+                example: "Значение не может быть отрицательным"
+          description: Детали ошибок по полям (для ошибок валидации)
+
+    ProductDeleteConflictError:
+      type: object
+      description: Ошибка при попытке удалить продукт, используемый в блюдах
+      properties:
+        code:
+          type: string
+          example: "PRODUCT_IN_USE"
+        message:
+          type: string
+          example: "Невозможно удалить продукт: он используется в одном или нескольких блюдах"
+        usedInDishes:
+          type: array
+          description: Список блюд, в которых используется данный продукт
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+                example: "987fbc97-4bed-5078-af07-9141ba07c9f3"
+              name:
+                type: string
+                example: "Борщ украинский"
+
+  responses:
+    BadRequest:
+      description: Некорректный запрос (ошибка валидации входных данных)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: "VALIDATION_ERROR"
+            message: "Ошибка валидации данных"
+            details:
+              - field: "name"
+                message: "Минимальная длина — 2 символа"
+
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: "NOT_FOUND"
+            message: "Запрошенный ресурс не найден"
+
+    UnprocessableEntity:
+      description: >
+        Семантическая ошибка (например, сумма БЖУ превышает 100,
+        флаг недоступен для данного состава блюда)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: "BJU_SUM_EXCEEDED"
+            message: "Сумма БЖУ на 100 грамм не может превышать 100"
+
+    InternalServerError:
+      description: Внутренняя ошибка сервера
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: "INTERNAL_ERROR"
+            message: "Внутренняя ошибка сервера"
