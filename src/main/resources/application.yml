@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: recipe-book-api
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/recipe_book
+    username: postgres
+    password: postgres
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 50MB
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1
