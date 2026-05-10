@@ -28,3 +28,18 @@ server:
   port: 8080
   servlet:
     context-path: /api/v1
+
+app:
+  upload:
+    upload-dir: uploads
+    max-file-size: 10485760
+    max-files-per-item: 5
+    allowed-content-types:
+      - image/jpeg
+      - image/png
+      - image/webp
+    allowed-extensions:
+      - jpg
+      - jpeg
+      - png
+      - webp

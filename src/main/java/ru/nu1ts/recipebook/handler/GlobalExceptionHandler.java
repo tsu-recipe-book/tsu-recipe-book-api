@@ -126,12 +126,18 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException ex) {
+        int httpStatus = switch (ex.getErrorCode()) {
+            case INVALID_FILE_TYPE, FILE_TOO_LARGE, TOO_MANY_FILES -> 400;
+            case FILE_STORAGE_ERROR -> 500;
+            default -> 422;
+        };
+
         ErrorResponse body = ErrorResponse.builder()
                 .code(ex.getErrorCode().getCode())
                 .message(ex.getMessage())
                 .build();
 
-        return ResponseEntity.status(HttpStatus.valueOf(422)).body(body);
+        return ResponseEntity.status(HttpStatus.valueOf(httpStatus)).body(body);
     }
 
     @ExceptionHandler(Exception.class)

@@ -12,6 +12,10 @@ public enum ErrorCode {
     BJU_SUM_EXCEEDED(422),
     PRODUCT_IN_USE(409),
     FLAG_NOT_AVAILABLE(422),
+    INVALID_FILE_TYPE(400),
+    FILE_TOO_LARGE(400),
+    TOO_MANY_FILES(400),
+    FILE_STORAGE_ERROR(500),
     INTERNAL_ERROR(500);
 
     private final int code;
