@@ -5,6 +5,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import ru.nu1ts.recipebook.dto.ProductCreateRequest;
 import ru.nu1ts.recipebook.dto.ProductDto;
 import ru.nu1ts.recipebook.dto.ProductListItem;
@@ -20,6 +21,7 @@ import ru.nu1ts.recipebook.repository.ProductRepository;
 import ru.nu1ts.recipebook.repository.specification.ProductSpecification;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -69,12 +71,12 @@ public class ProductService {
                 .flags(request.getFlags() != null ? request.getFlags() : new ArrayList<>())
                 .build();
 
-        if (request.getPhotos() != null && !request.getPhotos().isEmpty()) {
-            savePhotos(product, request.getPhotos());
+        List<MultipartFile> validFiles = filterValidFiles(request.getPhotos());
+        if (!validFiles.isEmpty()) {
+            savePhotos(product, validFiles);
         }
 
-        Product savedProduct = productRepository.save(product);
-        return mapToDto(savedProduct);
+        return mapToDto(productRepository.save(product));
     }
 
     @Transactional
@@ -92,18 +94,9 @@ public class ProductService {
         product.setCookingRequired(request.getCookingRequired());
         product.setFlags(request.getFlags() != null ? request.getFlags() : new ArrayList<>());
 
-        if (request.getPhotos() != null && !request.getPhotos().isEmpty()) {
-            List<String> oldUrls = product.getPhotos().stream()
-                    .map(ProductPhoto::getPhotoUrl)
-                    .collect(Collectors.toList());
-            fileStorageService.deleteFiles(oldUrls);
-            product.getPhotos().clear();
+        updatePhotos(product, request);
 
-            savePhotos(product, request.getPhotos());
-        }
-
-        Product savedProduct = productRepository.save(product);
-        return mapToDto(savedProduct);
+        return mapToDto(productRepository.save(product));
     }
 
     @Transactional
@@ -119,7 +112,40 @@ public class ProductService {
         productRepository.delete(product);
     }
 
-    private void savePhotos(Product product, List<org.springframework.web.multipart.MultipartFile> files) {
+    private void updatePhotos(Product product, ProductUpdateRequest request) {
+        List<String> keepUrls = request.getPhotosToKeep() != null
+                ? request.getPhotosToKeep()
+                : new ArrayList<>();
+
+        List<String> urlsToDelete = product.getPhotos().stream()
+                .map(ProductPhoto::getPhotoUrl)
+                .filter(url -> !keepUrls.contains(url))
+                .collect(Collectors.toList());
+
+        if (!urlsToDelete.isEmpty()) {
+            fileStorageService.deleteFiles(urlsToDelete);
+        }
+
+        product.getPhotos().removeIf(photo -> !keepUrls.contains(photo.getPhotoUrl()));
+
+        List<MultipartFile> validNewFiles = filterValidFiles(request.getPhotos());
+        if (!validNewFiles.isEmpty()) {
+            List<UploadedFile> uploadedFiles = fileStorageService.saveFiles(validNewFiles);
+            for (UploadedFile uploaded : uploadedFiles) {
+                ProductPhoto photo = ProductPhoto.builder()
+                        .photoUrl(uploaded.getUrl())
+                        .product(product)
+                        .build();
+                product.addPhoto(photo);
+            }
+        }
+
+        for (int i = 0; i < product.getPhotos().size(); i++) {
+            product.getPhotos().get(i).setSortOrder(i);
+        }
+    }
+
+    private void savePhotos(Product product, List<MultipartFile> files) {
         List<UploadedFile> uploadedFiles = fileStorageService.saveFiles(files);
         for (int i = 0; i < uploadedFiles.size(); i++) {
             ProductPhoto photo = ProductPhoto.builder()
@@ -130,9 +156,18 @@ public class ProductService {
         }
     }
 
+    private List<MultipartFile> filterValidFiles(List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return files.stream()
+                .filter(file -> file != null && !file.isEmpty())
+                .collect(Collectors.toList());
+    }
+
     private ProductListItem mapToListItem(Product product) {
         String mainPhoto = product.getPhotos().isEmpty() ? null : product.getPhotos().get(0).getPhotoUrl();
-        
+
         return ProductListItem.builder()
                 .id(product.getId())
                 .name(product.getName())

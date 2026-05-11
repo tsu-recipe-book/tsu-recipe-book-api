@@ -50,5 +50,6 @@ public class ProductCreateRequest {
 
     private List<ProductFlag> flags;
 
+    @Schema(description = "Фотографии продукта")
     private List<MultipartFile> photos;
 }

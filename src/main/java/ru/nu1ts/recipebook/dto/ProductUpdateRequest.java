@@ -50,5 +50,12 @@ public class ProductUpdateRequest {
 
     private List<ProductFlag> flags;
 
+    @Schema(description = "Новые фотографии продукта (загрузка)")
     private List<MultipartFile> photos;
+
+    @Schema(
+            description = "URL уже загруженных фото, которые нужно оставить",
+            example = "[\"/uploads/22eba33a-28f6-4018-bb74-e40d3d249695.jpg\"]"
+    )
+    private List<String> photosToKeep;
 }
