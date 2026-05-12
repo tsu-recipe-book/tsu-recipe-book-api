@@ -151,12 +151,10 @@ public class DishService {
     @Transactional(readOnly = true)
     public DishNutritionResponse calculateNutrition(DishNutritionCalculationRequest request) {
         double totalWeight = 0, totalCal = 0, totalProt = 0, totalFat = 0, totalCarb = 0;
-        List<Product> products = new ArrayList<>();
 
         for (IngredientCalculationRequest item : request.getIngredients()) {
             Product p = productRepository.findById(item.getProductId())
                     .orElseThrow(() -> new ResourceNotFoundException("Product not found: " + item.getProductId()));
-            products.add(p);
             double f = item.getWeight() / 100.0;
             totalWeight += item.getWeight();
             totalCal += p.getCalories() * f;
