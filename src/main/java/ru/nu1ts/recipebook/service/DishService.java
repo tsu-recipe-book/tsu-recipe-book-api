@@ -47,13 +47,35 @@ public class DishService {
 
     @Transactional
     public DishDto createDish(DishCreateRequest request) {
+        String originalName = request.getName();
+        DishCategory determinedCategory = request.getCategory();
+
+        if (originalName.startsWith("!")) {
+            int firstSpace = originalName.indexOf(" ");
+            if (firstSpace > 1) {
+                String macro = originalName.substring(1, firstSpace).toLowerCase();
+                String newName = originalName.substring(firstSpace + 1);
+
+                determinedCategory = switch (macro) {
+                    case "десерт" -> DishCategory.DESSERT;
+                    case "первое", "суп" -> DishCategory.SOUP;
+                    case "второе" -> DishCategory.SECOND;
+                    case "напиток" -> DishCategory.DRINK;
+                    case "салат" -> DishCategory.SALAD;
+                    case "закуска" -> DishCategory.SNACK;
+                    default -> determinedCategory;
+                };
+                originalName = newName;
+            }
+        }
+
         DishNutritionCalculationRequest calcReq = new DishNutritionCalculationRequest(request.getIngredients());
         DishNutritionResponse nutrition = calculateNutrition(calcReq);
 
         Dish dish = Dish.builder()
-                .name(request.getName())
-                .category(request.getCategory())
-                .flags(request.getFlags() != null ? request.getFlags() : new ArrayList<>())
+                .name(originalName)
+                .category(determinedCategory)
+
                 .calories(nutrition.getCalories())
                 .proteins(nutrition.getProteins())
                 .fats(nutrition.getFats())
@@ -81,13 +103,35 @@ public class DishService {
     @Transactional
     public DishDto updateDish(UUID id, DishUpdateRequest request) {
         Dish dish = dishRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Dish not found"));
-        
+
+        String originalName = request.getName();
+        DishCategory determinedCategory = request.getCategory();
+
+        if (originalName.startsWith("!")) {
+            int firstSpace = originalName.indexOf(" ");
+            if (firstSpace > 1) {
+                String macro = originalName.substring(1, firstSpace).toLowerCase();
+                String newName = originalName.substring(firstSpace + 1);
+
+                determinedCategory = switch (macro) {
+                    case "десерт" -> DishCategory.DESSERT;
+                    case "первое", "суп" -> DishCategory.SOUP;
+                    case "второе" -> DishCategory.SECOND;
+                    case "напиток" -> DishCategory.DRINK;
+                    case "салат" -> DishCategory.SALAD;
+                    case "закуска" -> DishCategory.SNACK;
+                    default -> determinedCategory;
+                };
+                originalName = newName;
+            }
+        }
+
         DishNutritionCalculationRequest calcReq = new DishNutritionCalculationRequest(request.getIngredients());
         DishNutritionResponse nutrition = calculateNutrition(calcReq);
 
-        dish.setName(request.getName());
-        dish.setCategory(request.getCategory());
-        dish.setFlags(request.getFlags() != null ? request.getFlags() : new ArrayList<>());
+        dish.setName(originalName);
+        dish.setCategory(determinedCategory);
+
         dish.setCalories(nutrition.getCalories());
         dish.setProteins(nutrition.getProteins());
         dish.setFats(nutrition.getFats());
