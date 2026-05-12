@@ -1,5 +1,6 @@
 package ru.nu1ts.recipebook.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -23,7 +24,12 @@ public class DishUpdateRequest {
     @NotEmpty
     private List<IngredientCalculationRequest> ingredients;
 
+    @Schema(description = "Новые фотографии блюда")
     private List<MultipartFile> photos;
 
+    @Schema(
+            description = "URL уже загруженных фото, которые нужно оставить",
+            example = "[\"/uploads/22eba33a-28f6-4018-bb74-e40d3d249695.jpg\"]"
+    )
     private String[] photosToKeep;
 }
