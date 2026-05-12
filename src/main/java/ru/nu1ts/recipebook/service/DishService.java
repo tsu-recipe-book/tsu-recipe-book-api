@@ -14,14 +14,12 @@ import ru.nu1ts.recipebook.model.entity.DishPhoto;
 import ru.nu1ts.recipebook.model.entity.Product;
 import ru.nu1ts.recipebook.model.enums.DishCategory;
 import ru.nu1ts.recipebook.model.enums.DishFlag;
+import ru.nu1ts.recipebook.model.enums.ProductFlag;
 import ru.nu1ts.recipebook.repository.DishRepository;
 import ru.nu1ts.recipebook.repository.ProductRepository;
 import ru.nu1ts.recipebook.repository.specification.DishSpecification;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -36,7 +34,7 @@ public class DishService {
     public List<DishListItem> getDishes(String search, DishCategory category, List<DishFlag> flags, String sortBy, String sortOrder) {
         Sort sort = Sort.by(Sort.Direction.fromString(sortOrder), sortBy);
         Specification<Dish> spec = DishSpecification.filter(search, category, flags);
-        return dishRepository.findAll(spec, sort).stream().map(this::mapToListItem).collect(Collectors.toList());
+        return dishRepository.findAll(spec, sort).stream().map(this::mapToListItem).toList();
     }
 
     @Transactional(readOnly = true)
@@ -75,7 +73,6 @@ public class DishService {
         Dish dish = Dish.builder()
                 .name(originalName)
                 .category(determinedCategory)
-
                 .calories(nutrition.getCalories())
                 .proteins(nutrition.getProteins())
                 .fats(nutrition.getFats())
@@ -92,6 +89,15 @@ public class DishService {
                     .build();
             dish.addIngredient(ing);
         }
+
+        List<ProductFlag> commonProductFlags = calculateCommonProductFlags(dish.getIngredients());
+        List<DishFlag> validFlags = new ArrayList<>();
+        for (ProductFlag pf : commonProductFlags) {
+            try {
+                validFlags.add(DishFlag.valueOf(pf.name()));
+            } catch (IllegalArgumentException ignored) {}
+        }
+        dish.setFlags(validFlags);
 
         if (request.getPhotos() != null && !request.getPhotos().isEmpty()) {
             savePhotos(dish, request.getPhotos());
@@ -131,7 +137,6 @@ public class DishService {
 
         dish.setName(originalName);
         dish.setCategory(determinedCategory);
-
         dish.setCalories(nutrition.getCalories());
         dish.setProteins(nutrition.getProteins());
         dish.setFats(nutrition.getFats());
@@ -149,6 +154,15 @@ public class DishService {
             dish.addIngredient(ing);
         }
 
+        List<ProductFlag> commonProductFlags = calculateCommonProductFlags(dish.getIngredients());
+        List<DishFlag> validFlags = new ArrayList<>();
+        for (ProductFlag pf : commonProductFlags) {
+            try {
+                validFlags.add(DishFlag.valueOf(pf.name()));
+            } catch (IllegalArgumentException ignored) {}
+        }
+        dish.setFlags(validFlags);
+
         updatePhotos(dish, request);
 
         return mapToDto(dishRepository.save(dish));
@@ -157,7 +171,7 @@ public class DishService {
     @Transactional
     public void deleteDish(UUID id) {
         Dish dish = dishRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Dish not found"));
-        List<String> urls = dish.getPhotos().stream().map(DishPhoto::getPhotoUrl).collect(Collectors.toList());
+        List<String> urls = dish.getPhotos().stream().map(DishPhoto::getPhotoUrl).toList();
         fileStorageService.deleteFiles(urls);
         dishRepository.delete(dish);
     }
@@ -216,6 +230,20 @@ public class DishService {
                 .build();
     }
 
+    private List<ProductFlag> calculateCommonProductFlags(List<DishIngredient> ingredients) {
+        if (ingredients.isEmpty()) return new ArrayList<>();
+
+        List<Product> products = ingredients.stream()
+                .map(DishIngredient::getProduct)
+                .toList();
+
+        Set<ProductFlag> commonFlags = new HashSet<>(products.get(0).getFlags());
+        for (int i = 1; i < products.size(); i++) {
+            commonFlags.retainAll(products.get(i).getFlags());
+        }
+        return new ArrayList<>(commonFlags);
+    }
+
     private DishListItem mapToListItem(Dish dish) {
         return DishListItem.builder()
                 .id(dish.getId()).name(dish.getName())
@@ -233,10 +261,10 @@ public class DishService {
                 .fats(dish.getFats()).carbohydrates(dish.getCarbohydrates())
                 .portionSize(dish.getPortionSize()).category(dish.getCategory())
                 .flags(dish.getFlags())
-                .photos(dish.getPhotos().stream().map(DishPhoto::getPhotoUrl).collect(Collectors.toList()))
+                .photos(dish.getPhotos().stream().map(DishPhoto::getPhotoUrl).toList())
                 .ingredients(dish.getIngredients().stream().map(ing -> new DishIngredientDto(
                         ing.getProduct().getId(), ing.getProduct().getName(), ing.getWeight()
-                )).collect(Collectors.toList()))
+                )).toList())
                 .build();
     }
 }
