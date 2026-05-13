@@ -48,7 +48,7 @@ public class ProductService {
     @Transactional(readOnly = true)
     public ProductDto getProductById(UUID productId) {
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + productId));
+                .orElseThrow(() -> new ResourceNotFoundException("Product", productId.toString()));
         return mapToDto(product);
     }
 
@@ -77,7 +77,7 @@ public class ProductService {
     @Transactional
     public ProductDto updateProduct(UUID productId, ProductUpdateRequest request) {
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + productId));
+                .orElseThrow(() -> new ResourceNotFoundException("Product", productId.toString()));
 
         product.setName(request.getName());
         product.setCalories(request.getCalories());
@@ -97,7 +97,7 @@ public class ProductService {
     @Transactional
     public void deleteProduct(UUID productId) {
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + productId));
+                .orElseThrow(() -> new ResourceNotFoundException("Product", productId.toString()));
 
         List<Object[]> dishData = dishIngredientRepository.findDishRefsByProductId(productId);
         if (!dishData.isEmpty()) {

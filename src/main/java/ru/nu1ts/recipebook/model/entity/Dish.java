@@ -64,11 +64,6 @@ public class Dish {
         photo.setDish(this);
     }
 
-    public void removePhoto(DishPhoto photo) {
-        photos.remove(photo);
-        photo.setDish(null);
-    }
-
     public void addIngredient(DishIngredient ingredient) {
         ingredients.add(ingredient);
         ingredient.setDish(this);

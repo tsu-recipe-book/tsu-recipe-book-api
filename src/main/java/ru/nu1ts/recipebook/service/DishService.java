@@ -39,7 +39,7 @@ public class DishService {
 
     @Transactional(readOnly = true)
     public DishDto getDishById(UUID id) {
-        Dish dish = dishRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Dish not found"));
+        Dish dish = dishRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Dish", id.toString()));
         return mapToDto(dish);
     }
 
@@ -108,7 +108,7 @@ public class DishService {
 
     @Transactional
     public DishDto updateDish(UUID id, DishUpdateRequest request) {
-        Dish dish = dishRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Dish not found"));
+        Dish dish = dishRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Dish", id.toString()));
 
         String originalName = request.getName();
         DishCategory determinedCategory = request.getCategory();
@@ -170,7 +170,7 @@ public class DishService {
 
     @Transactional
     public void deleteDish(UUID id) {
-        Dish dish = dishRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Dish not found"));
+        Dish dish = dishRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Dish", id.toString()));
         List<String> urls = dish.getPhotos().stream().map(DishPhoto::getPhotoUrl).toList();
         fileStorageService.deleteFiles(urls);
         dishRepository.delete(dish);

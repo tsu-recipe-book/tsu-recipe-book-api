@@ -3,7 +3,6 @@ package ru.nu1ts.recipebook.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
 import lombok.Data;
 import org.springframework.web.multipart.MultipartFile;
 import ru.nu1ts.recipebook.model.enums.DishCategory;

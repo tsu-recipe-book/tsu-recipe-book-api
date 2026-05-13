@@ -88,16 +88,6 @@ public class Product {
         photo.setProduct(this);
     }
 
-    public void setPhotos(List<ProductPhoto> photoList) {
-        this.photos.clear();
-        if (photoList != null) {
-            photoList.forEach(photo -> {
-                photo.setProduct(this);
-                this.photos.add(photo);
-            });
-        }
-    }
-
     @CreationTimestamp(source = SourceType.DB)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

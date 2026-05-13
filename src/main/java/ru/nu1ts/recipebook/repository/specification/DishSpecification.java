@@ -1,6 +1,5 @@
 package ru.nu1ts.recipebook.repository.specification;
 
-import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 import ru.nu1ts.recipebook.model.entity.Dish;
