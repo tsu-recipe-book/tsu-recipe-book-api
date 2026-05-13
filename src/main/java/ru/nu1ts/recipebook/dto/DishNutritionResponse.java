@@ -5,7 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import ru.nu1ts.recipebook.model.enums.ProductFlag;
+import ru.nu1ts.recipebook.model.enums.DishFlag;
 
 import java.util.List;
 
@@ -15,6 +15,7 @@ import java.util.List;
 @AllArgsConstructor
 @Schema(description = "Результат расчета КБЖУ блюда")
 public class DishNutritionResponse {
+
     @Schema(description = "Калории на порцию", example = "350.5")
     private Double calories;
 
@@ -30,6 +31,6 @@ public class DishNutritionResponse {
     @Schema(description = "Общий вес порции (сумма весов ингредиентов)", example = "450.0")
     private Double portionSize;
 
-    @Schema(description = "Флаги, которые доступны для этого блюда (есть у ВСЕХ продуктов)")
-    private List<ProductFlag> availableFlags;
+    @Schema(description = "Флаги, доступные для этого блюда (есть у ВСЕХ продуктов)")
+    private List<DishFlag> availableFlags;
 }

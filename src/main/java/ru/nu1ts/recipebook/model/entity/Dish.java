@@ -2,9 +2,13 @@ package ru.nu1ts.recipebook.model.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SourceType;
+import org.hibernate.annotations.UpdateTimestamp;
 import ru.nu1ts.recipebook.model.enums.DishCategory;
 import ru.nu1ts.recipebook.model.enums.DishFlag;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -58,6 +62,14 @@ public class Dish implements PhotoManaged<DishPhoto> {
     @OneToMany(mappedBy = "dish", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<DishIngredient> ingredients = new ArrayList<>();
+
+    @CreationTimestamp(source = SourceType.DB)
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @UpdateTimestamp(source = SourceType.DB)
+    @Column(name = "updated_at")
+    private Instant updatedAt;
 
     public void addPhoto(DishPhoto photo) {
         photos.add(photo);

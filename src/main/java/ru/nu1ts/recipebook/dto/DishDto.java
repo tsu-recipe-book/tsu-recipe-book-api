@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import ru.nu1ts.recipebook.model.enums.DishCategory;
 import ru.nu1ts.recipebook.model.enums.DishFlag;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,6 +25,9 @@ public class DishDto {
     private Double portionSize;
     private DishCategory category;
     private List<DishFlag> flags;
+    private List<DishFlag> availableFlags;
     private List<String> photos;
     private List<DishIngredientDto> ingredients;
+    private Instant createdAt;
+    private Instant updatedAt;
 }

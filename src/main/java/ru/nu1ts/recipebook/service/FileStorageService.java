@@ -27,15 +27,6 @@ public class FileStorageService {
 
     private final FileUploadProperties properties;
 
-    public List<MultipartFile> filterValidFiles(List<MultipartFile> files) {
-        if (files == null || files.isEmpty()) {
-            return Collections.emptyList();
-        }
-        return files.stream()
-                .filter(file -> file != null && !file.isEmpty())
-                .toList();
-    }
-
     @PostConstruct
     void init() {
         try {
@@ -46,16 +37,27 @@ public class FileStorageService {
         }
     }
 
+    public int getMaxFilesPerItem() {
+        return properties.getMaxFilesPerItem();
+    }
+
+    public List<MultipartFile> filterValidFiles(List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return files.stream()
+                .filter(file -> file != null && !file.isEmpty())
+                .toList();
+    }
+
     public List<UploadedFile> saveFiles(List<MultipartFile> files) {
         if (files == null || files.isEmpty()) {
             return List.of();
         }
-
         if (files.size() > properties.getMaxFilesPerItem()) {
             throw new BusinessException(ErrorCode.TOO_MANY_FILES,
                     "Too many files. Maximum allowed: " + properties.getMaxFilesPerItem());
         }
-
         return files.stream()
                 .map(this::saveFile)
                 .collect(Collectors.toList());
@@ -77,7 +79,6 @@ public class FileStorageService {
         }
 
         String url = "/uploads/" + storedName;
-
         log.info("File saved: {} -> {} ({} bytes)", originalName, url, file.getSize());
 
         return UploadedFile.builder()
@@ -91,12 +92,10 @@ public class FileStorageService {
         if (fileUrl == null || fileUrl.isBlank()) {
             return;
         }
-
         String fileName = extractFileName(fileUrl);
         if (fileName == null) {
             return;
         }
-
         Path filePath = properties.getUploadPath().resolve(fileName);
         try {
             boolean deleted = Files.deleteIfExists(filePath);
@@ -130,22 +129,21 @@ public class FileStorageService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR,
                     "Uploaded file is empty");
         }
-
         if (file.getSize() > properties.getMaxFileSize()) {
             throw new BusinessException(ErrorCode.FILE_TOO_LARGE,
-                    "File is too large. Maximum allowed: " + properties.getMaxFileSize() / (1024 * 1024) + "MB");
+                    "File is too large. Maximum allowed: "
+                            + properties.getMaxFileSize() / (1024 * 1024) + "MB");
         }
-
         String contentType = file.getContentType();
         if (contentType != null && !properties.getAllowedContentTypes().contains(contentType)) {
             throw new BusinessException(ErrorCode.INVALID_FILE_TYPE,
                     "File type '" + contentType + "' is not allowed");
         }
-
         String extension = getExtension(file.getOriginalFilename());
         if (extension == null || !properties.getAllowedExtensions().contains(extension.toLowerCase())) {
             throw new BusinessException(ErrorCode.INVALID_FILE_TYPE,
-                    "File extension is not allowed. Allowed: " + String.join(", ", properties.getAllowedExtensions()));
+                    "File extension is not allowed. Allowed: "
+                            + String.join(", ", properties.getAllowedExtensions()));
         }
     }
 
