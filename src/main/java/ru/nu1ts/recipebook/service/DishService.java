@@ -60,24 +60,8 @@ public class DishService {
                 .portionSize(nutrition.getPortionSize())
                 .build();
 
-        for (IngredientCalculationRequest ingReq : request.getIngredients()) {
-            Product product = productRepository.findById(ingReq.getProductId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Product", ingReq.getProductId().toString()));
-            DishIngredient ing = DishIngredient.builder()
-                    .product(product)
-                    .weight(ingReq.getWeight())
-                    .build();
-            dish.addIngredient(ing);
-        }
-
-        List<ProductFlag> commonProductFlags = calculateCommonProductFlags(dish.getIngredients());
-        List<DishFlag> validFlags = new ArrayList<>();
-        for (ProductFlag pf : commonProductFlags) {
-            try {
-                validFlags.add(DishFlag.valueOf(pf.name()));
-            } catch (IllegalArgumentException ignored) {}
-        }
-        dish.setFlags(validFlags);
+        updateIngredients(dish, request.getIngredients());
+        updateFlagsFromIngredients(dish);
 
         List<MultipartFile> validFiles = fileStorageService.filterValidFiles(request.getPhotos());
         if (!validFiles.isEmpty()) {
@@ -105,24 +89,8 @@ public class DishService {
         dish.setPortionSize(nutrition.getPortionSize());
 
         dish.getIngredients().clear();
-        for (IngredientCalculationRequest ingReq : request.getIngredients()) {
-            Product product = productRepository.findById(ingReq.getProductId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Product", ingReq.getProductId().toString()));
-            DishIngredient ing = DishIngredient.builder()
-                    .product(product)
-                    .weight(ingReq.getWeight())
-                    .build();
-            dish.addIngredient(ing);
-        }
-
-        List<ProductFlag> commonProductFlags = calculateCommonProductFlags(dish.getIngredients());
-        List<DishFlag> validFlags = new ArrayList<>();
-        for (ProductFlag pf : commonProductFlags) {
-            try {
-                validFlags.add(DishFlag.valueOf(pf.name()));
-            } catch (IllegalArgumentException ignored) {}
-        }
-        dish.setFlags(validFlags);
+        updateIngredients(dish, request.getIngredients());
+        updateFlagsFromIngredients(dish);
 
         updatePhotos(dish, request);
 
@@ -137,8 +105,32 @@ public class DishService {
         dishRepository.delete(dish);
     }
 
+    private void updateIngredients(Dish dish, List<IngredientCalculationRequest> ingredients) {
+        for (IngredientCalculationRequest ingReq : ingredients) {
+            Product product = productRepository.findById(ingReq.getProductId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Product", ingReq.getProductId().toString()));
+            DishIngredient ing = DishIngredient.builder()
+                    .product(product)
+                    .weight(ingReq.getWeight())
+                    .build();
+            dish.addIngredient(ing);
+        }
+    }
+
+    private void updateFlagsFromIngredients(Dish dish) {
+        List<ProductFlag> commonProductFlags = calculateCommonProductFlags(dish.getIngredients());
+        List<DishFlag> validFlags = new ArrayList<>();
+        for (ProductFlag pf : commonProductFlags) {
+            try {
+                validFlags.add(DishFlag.valueOf(pf.name()));
+            } catch (IllegalArgumentException ignored) {}
+        }
+        dish.setFlags(validFlags);
+    }
+
     private void updatePhotos(Dish dish, DishUpdateRequest request) {
         List<String> keepUrls = request.getPhotosToKeep() != null ? Arrays.asList(request.getPhotosToKeep()) : new ArrayList<>();
+        
         List<String> urlsToDelete = dish.getPhotos().stream()
                 .map(DishPhoto::getPhotoUrl)
                 .filter(url -> !keepUrls.contains(url))

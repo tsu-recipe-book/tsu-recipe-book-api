@@ -89,7 +89,7 @@ public class ProductService {
         product.setCookingRequired(request.getCookingRequired());
         product.setFlags(request.getFlags() != null ? request.getFlags() : new ArrayList<>());
 
-        updatePhotos(product, request);
+        updatePhotos(product, request.getPhotosToKeep(), request.getPhotos());
 
         return mapToDto(productRepository.save(product));
     }
@@ -118,23 +118,20 @@ public class ProductService {
         productRepository.delete(product);
     }
 
-    private void updatePhotos(Product product, ProductUpdateRequest request) {
-        List<String> keepUrls = request.getPhotosToKeep() != null
-                ? request.getPhotosToKeep()
-                : new ArrayList<>();
+    private void updatePhotos(Product product, List<String> keepUrls, List<MultipartFile> newFiles) {
+        List<String> finalKeepUrls = keepUrls != null ? keepUrls : new ArrayList<>();
 
         List<String> urlsToDelete = product.getPhotos().stream()
                 .map(ProductPhoto::getPhotoUrl)
-                .filter(url -> !keepUrls.contains(url))
+                .filter(url -> !finalKeepUrls.contains(url))
                 .toList();
 
         if (!urlsToDelete.isEmpty()) {
             fileStorageService.deleteFiles(urlsToDelete);
         }
+        product.getPhotos().removeIf(photo -> !finalKeepUrls.contains(photo.getPhotoUrl()));
 
-        product.getPhotos().removeIf(photo -> !keepUrls.contains(photo.getPhotoUrl()));
-
-        List<MultipartFile> validNewFiles = fileStorageService.filterValidFiles(request.getPhotos());
+        List<MultipartFile> validNewFiles = fileStorageService.filterValidFiles(newFiles);
         if (!validNewFiles.isEmpty()) {
             List<UploadedFile> uploadedFiles = fileStorageService.saveFiles(validNewFiles);
             for (UploadedFile uploaded : uploadedFiles) {
