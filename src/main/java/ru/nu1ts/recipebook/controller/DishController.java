@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/dishes")
+@RequestMapping("/dishes")
 @RequiredArgsConstructor
 @Tag(name = "Dishes", description = "Управление блюдами")
 public class DishController {
