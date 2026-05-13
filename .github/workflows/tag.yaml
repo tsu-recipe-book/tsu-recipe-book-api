@@ -57,19 +57,42 @@ jobs:
         id: create_tag
         run: |
           SRC_BRANCH="${{ steps.pr-info.outputs.source_branch }}"
-          
           echo "Source branch: $SRC_BRANCH"
 
-          VERSION="${SRC_BRANCH#release/}"
-          TAG_NAME="${VERSION}"
-
-          echo "Extracted Version: $VERSION"
-          echo "Tag to create: $TAG_NAME"
-
-          if [ -z "$VERSION" ] || [ "$VERSION" = "$SRC_BRANCH" ]; then
-            echo "❌ Could not extract version from branch name. Expected branch format: release/*"
-            exit 1
+          if [[ "$SRC_BRANCH" == release/* ]]; then
+            VERSION="${SRC_BRANCH#release/}"
+          elif [[ "$SRC_BRANCH" == hotfix/* ]]; then
+            if [[ "$SRC_BRANCH" =~ ^hotfix/v[0-9] ]]; then
+              VERSION="${SRC_BRANCH#hotfix/}"
+            else
+              echo "🔍 Hotfix without version in name. Fetching last tag..."
+              git fetch --tags
+              LAST_TAG=$(git tag --sort=-v:refname | head -n 1)
+              
+              if [ -z "$LAST_TAG" ]; then
+                echo "⚠️ No tags found. Falling back to v1.0.0"
+                VERSION="v1.0.0"
+              else
+                echo "Latest tag found: $LAST_TAG"
+                if [[ "$LAST_TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+                  MAJOR="${BASH_REMATCH[1]}"
+                  MINOR="${BASH_REMATCH[2]}"
+                  PATCH="${BASH_REMATCH[3]}"
+                  NEW_PATCH=$((PATCH + 1))
+                  VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+                else
+                  echo "⚠️ Last tag $LAST_TAG doesn't match vX.Y.Z format. Appending -hotfix"
+                  VERSION="${LAST_TAG}-hotfix"
+                fi
+              fi
+            fi
+          else
+            VERSION=""
           fi
+
+          TAG_NAME="${VERSION}"
+          echo "Extracted/Calculated Version: $VERSION"
+          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -91,7 +114,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.create_tag.outputs.tag_name }}
-          name: release ${{ steps.create_tag.outputs.tag_name }}
+          name: ${{ steps.create_tag.outputs.tag_name }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
