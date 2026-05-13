@@ -3,14 +3,8 @@ name: Recipe Book API CI/CD
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'tsu-recipe-book-api/**'
-      - '.github/workflows/recipe-book.yml'
   pull_request:
     branches: [ main ]
-    paths:
-      - 'tsu-recipe-book-api/**'
-      - '.github/workflows/recipe-book.yml'
 
 env:
   JAVA_VERSION: '21'
