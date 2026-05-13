@@ -6,31 +6,26 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import ru.nu1ts.recipebook.dto.ProductCreateRequest;
-import ru.nu1ts.recipebook.dto.ProductDto;
-import ru.nu1ts.recipebook.dto.ProductListItem;
-import ru.nu1ts.recipebook.dto.ProductUpdateRequest;
-import ru.nu1ts.recipebook.dto.UploadedFile;
+import ru.nu1ts.recipebook.dto.*;
+import ru.nu1ts.recipebook.exception.ProductDeleteConflictException;
 import ru.nu1ts.recipebook.exception.ResourceNotFoundException;
 import ru.nu1ts.recipebook.model.entity.Product;
 import ru.nu1ts.recipebook.model.entity.ProductPhoto;
 import ru.nu1ts.recipebook.model.enums.CookingRequired;
 import ru.nu1ts.recipebook.model.enums.ProductCategory;
 import ru.nu1ts.recipebook.model.enums.ProductFlag;
+import ru.nu1ts.recipebook.repository.DishIngredientRepository;
 import ru.nu1ts.recipebook.repository.ProductRepository;
 import ru.nu1ts.recipebook.repository.specification.ProductSpecification;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
-import java.util.stream.Collectors;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
 public class ProductService {
 
     private final ProductRepository productRepository;
+    private final DishIngredientRepository dishIngredientRepository;
     private final FileStorageService fileStorageService;
 
     @Transactional(readOnly = true)
@@ -47,7 +42,7 @@ public class ProductService {
 
         return productRepository.findAll(spec, sort).stream()
                 .map(this::mapToListItem)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -104,9 +99,20 @@ public class ProductService {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + productId));
 
+        List<Object[]> dishData = dishIngredientRepository.findDishRefsByProductId(productId);
+        if (!dishData.isEmpty()) {
+            List<DishReference> references = dishData.stream()
+                    .map(data -> DishReference.builder()
+                            .id(data[0].toString())
+                            .name(data[1].toString())
+                            .build())
+                    .toList();
+            throw new ProductDeleteConflictException(references);
+        }
+
         List<String> urls = product.getPhotos().stream()
                 .map(ProductPhoto::getPhotoUrl)
-                .collect(Collectors.toList());
+                .toList();
         fileStorageService.deleteFiles(urls);
 
         productRepository.delete(product);
@@ -120,7 +126,7 @@ public class ProductService {
         List<String> urlsToDelete = product.getPhotos().stream()
                 .map(ProductPhoto::getPhotoUrl)
                 .filter(url -> !keepUrls.contains(url))
-                .collect(Collectors.toList());
+                .toList();
 
         if (!urlsToDelete.isEmpty()) {
             fileStorageService.deleteFiles(urlsToDelete);
@@ -162,7 +168,7 @@ public class ProductService {
         }
         return files.stream()
                 .filter(file -> file != null && !file.isEmpty())
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private ProductListItem mapToListItem(Product product) {
@@ -194,7 +200,7 @@ public class ProductService {
                 .category(product.getCategory())
                 .cookingRequired(product.getCookingRequired())
                 .flags(product.getFlags())
-                .photos(product.getPhotos().stream().map(ProductPhoto::getPhotoUrl).collect(Collectors.toList()))
+                .photos(product.getPhotos().stream().map(ProductPhoto::getPhotoUrl).toList())
                 .build();
     }
 }
