@@ -26,21 +26,22 @@ import java.util.*;
 @RequiredArgsConstructor
 public class ProductService {
 
+    private static final double BJU_EPSILON = 1e-9;
+
     private final ProductRepository productRepository;
     private final DishIngredientRepository dishIngredientRepository;
     private final FileStorageService fileStorageService;
 
     @Transactional(readOnly = true)
-    public List<ProductListItem> getProducts(
-            String search,
-            ProductCategory category,
-            CookingRequired cookingRequired,
-            List<ProductFlag> flags,
-            String sortBy,
-            String sortOrder
-    ) {
+    public List<ProductListItem> getProducts(String search,
+                                             ProductCategory category,
+                                             CookingRequired cookingRequired,
+                                             List<ProductFlag> flags,
+                                             String sortBy,
+                                             String sortOrder) {
         Sort sort = Sort.by(Sort.Direction.fromString(sortOrder), sortBy);
-        Specification<Product> spec = ProductSpecification.filter(search, category, cookingRequired, flags);
+        Specification<Product> spec =
+                ProductSpecification.filter(search, category, cookingRequired, flags);
 
         return productRepository.findAll(spec, sort).stream()
                 .map(this::mapToListItem)
@@ -49,14 +50,14 @@ public class ProductService {
 
     @Transactional(readOnly = true)
     public ProductDto getProductById(UUID productId) {
-        Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product", productId.toString()));
+        Product product = findProductOrThrow(productId);
         return mapToDto(product);
     }
 
     @Transactional
     public ProductDto createProduct(ProductCreateRequest request) {
         validateNutrition(request.getProteins(), request.getFats(), request.getCarbohydrates());
+
         Product product = Product.builder()
                 .name(request.getName())
                 .calories(request.getCalories())
@@ -80,8 +81,8 @@ public class ProductService {
     @Transactional
     public ProductDto updateProduct(UUID productId, ProductUpdateRequest request) {
         validateNutrition(request.getProteins(), request.getFats(), request.getCarbohydrates());
-        Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product", productId.toString()));
+
+        Product product = findProductOrThrow(productId);
 
         product.setName(request.getName());
         product.setCalories(request.getCalories());
@@ -93,7 +94,9 @@ public class ProductService {
         product.setCookingRequired(request.getCookingRequired());
         product.setFlags(request.getFlags() != null ? request.getFlags() : new ArrayList<>());
 
-        List<String> keepUrls = request.getPhotosToKeep() != null ? request.getPhotosToKeep() : new ArrayList<>();
+        List<String> keepUrls = request.getPhotosToKeep() != null
+                ? request.getPhotosToKeep()
+                : new ArrayList<>();
         updatePhotos(product, keepUrls, request.getPhotos());
 
         return mapToDto(productRepository.save(product));
@@ -101,8 +104,7 @@ public class ProductService {
 
     @Transactional
     public void deleteProduct(UUID productId) {
-        Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product", productId.toString()));
+        Product product = findProductOrThrow(productId);
 
         List<Object[]> dishData = dishIngredientRepository.findDishRefsByProductId(productId);
         if (!dishData.isEmpty()) {
@@ -119,15 +121,32 @@ public class ProductService {
                 .map(ProductPhoto::getPhotoUrl)
                 .toList();
         fileStorageService.deleteFiles(urls);
-
         productRepository.delete(product);
     }
 
+    private void validateNutrition(Double proteins, Double fats, Double carbohydrates) {
+        if (proteins + fats + carbohydrates > 100.0 + BJU_EPSILON) {
+            throw new BusinessException(ErrorCode.BJU_SUM_EXCEEDED,
+                    "The amount of BJU per 100 grams cannot exceed 100");
+        }
+    }
+
     private void updatePhotos(Product product, List<String> keepUrls, List<MultipartFile> newFiles) {
-        fileStorageService.deleteUnusedFiles(product.getPhotos().stream().map(ProductPhoto::getPhotoUrl).toList(), keepUrls);
+        List<MultipartFile> validNewFiles = fileStorageService.filterValidFiles(newFiles);
+
+        int totalCount = keepUrls.size() + validNewFiles.size();
+        if (totalCount > fileStorageService.getMaxFilesPerItem()) {
+            throw new BusinessException(ErrorCode.TOO_MANY_FILES,
+                    "Total photos cannot exceed " + fileStorageService.getMaxFilesPerItem()
+                            + ". Keeping: " + keepUrls.size()
+                            + ", new: " + validNewFiles.size());
+        }
+
+        fileStorageService.deleteUnusedFiles(
+                product.getPhotos().stream().map(ProductPhoto::getPhotoUrl).toList(),
+                keepUrls);
         product.getPhotos().removeIf(photo -> !keepUrls.contains(photo.getPhotoUrl()));
 
-        List<MultipartFile> validNewFiles = fileStorageService.filterValidFiles(newFiles);
         if (!validNewFiles.isEmpty()) {
             List<UploadedFile> uploadedFiles = fileStorageService.saveFiles(validNewFiles);
             for (UploadedFile uploaded : uploadedFiles) {
@@ -155,14 +174,15 @@ public class ProductService {
         }
     }
 
-    private void validateNutrition(Double p, Double f, Double c) {
-        if (p + f + c > 100.0) {
-            throw new BusinessException(ErrorCode.BJU_SUM_EXCEEDED, "The amount of BJU per 100 grams cannot exceed 100");
-        }
+    private Product findProductOrThrow(UUID productId) {
+        return productRepository.findById(productId)
+                .orElseThrow(() -> new ResourceNotFoundException("Product", productId.toString()));
     }
 
     private ProductListItem mapToListItem(Product product) {
-        String mainPhoto = product.getPhotos().isEmpty() ? null : product.getPhotos().get(0).getPhotoUrl();
+        String mainPhoto = product.getPhotos().isEmpty()
+                ? null
+                : product.getPhotos().get(0).getPhotoUrl();
 
         return ProductListItem.builder()
                 .id(product.getId())
@@ -190,7 +210,10 @@ public class ProductService {
                 .category(product.getCategory())
                 .cookingRequired(product.getCookingRequired())
                 .flags(product.getFlags())
-                .photos(product.getPhotos().stream().map(ProductPhoto::getPhotoUrl).toList())
+                .photos(product.getPhotos().stream()
+                        .map(ProductPhoto::getPhotoUrl).toList())
+                .createdAt(product.getCreatedAt())
+                .updatedAt(product.getUpdatedAt())
                 .build();
     }
 }

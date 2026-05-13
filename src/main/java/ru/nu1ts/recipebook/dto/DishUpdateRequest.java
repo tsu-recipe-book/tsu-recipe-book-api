@@ -11,6 +11,7 @@ import java.util.List;
 
 @Data
 public class DishUpdateRequest {
+
     @NotBlank
     @Size(min = 2)
     private String name;
@@ -31,4 +32,19 @@ public class DishUpdateRequest {
             example = "[\"/uploads/22eba33a-28f6-4018-bb74-e40d3d249695.jpg\"]"
     )
     private String[] photosToKeep;
+
+    @PositiveOrZero
+    private Double calories;
+
+    @PositiveOrZero
+    private Double proteins;
+
+    @PositiveOrZero
+    private Double fats;
+
+    @PositiveOrZero
+    private Double carbohydrates;
+
+    @Positive
+    private Double portionSize;
 }

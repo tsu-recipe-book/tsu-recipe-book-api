@@ -21,6 +21,7 @@ public class DishListItem {
     private Double proteins;
     private Double fats;
     private Double carbohydrates;
+    private Double portionSize;
     private DishCategory category;
     private List<DishFlag> flags;
     private String mainPhoto;

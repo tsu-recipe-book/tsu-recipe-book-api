@@ -23,4 +23,19 @@ public class DishCreateRequest {
     private List<IngredientCalculationRequest> ingredients;
 
     private List<MultipartFile> photos;
+
+    @PositiveOrZero
+    private Double calories;
+
+    @PositiveOrZero
+    private Double proteins;
+
+    @PositiveOrZero
+    private Double fats;
+
+    @PositiveOrZero
+    private Double carbohydrates;
+
+    @Positive
+    private Double portionSize;
 }
