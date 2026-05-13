@@ -7,7 +7,4 @@ public class ResourceNotFoundException extends BusinessException {
                 String.format("%s with id '%s' not found", resourceType, id));
     }
 
-    public ResourceNotFoundException(String message) {
-        super(ErrorCode.NOT_FOUND, message);
-    }
 }
