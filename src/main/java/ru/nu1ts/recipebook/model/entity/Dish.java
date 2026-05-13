@@ -16,7 +16,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Dish {
+public class Dish implements PhotoManaged<DishPhoto> {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;

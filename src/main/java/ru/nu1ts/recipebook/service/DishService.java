@@ -18,9 +18,9 @@ import ru.nu1ts.recipebook.model.enums.ProductFlag;
 import ru.nu1ts.recipebook.repository.DishRepository;
 import ru.nu1ts.recipebook.repository.ProductRepository;
 import ru.nu1ts.recipebook.repository.specification.DishSpecification;
+import ru.nu1ts.recipebook.util.CategoryMacroParser;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -45,34 +45,14 @@ public class DishService {
 
     @Transactional
     public DishDto createDish(DishCreateRequest request) {
-        String originalName = request.getName();
-        DishCategory determinedCategory = request.getCategory();
-
-        if (originalName.startsWith("!")) {
-            int firstSpace = originalName.indexOf(" ");
-            if (firstSpace > 1) {
-                String macro = originalName.substring(1, firstSpace).toLowerCase();
-                String newName = originalName.substring(firstSpace + 1);
-
-                determinedCategory = switch (macro) {
-                    case "десерт" -> DishCategory.DESSERT;
-                    case "первое", "суп" -> DishCategory.SOUP;
-                    case "второе" -> DishCategory.SECOND;
-                    case "напиток" -> DishCategory.DRINK;
-                    case "салат" -> DishCategory.SALAD;
-                    case "закуска" -> DishCategory.SNACK;
-                    default -> determinedCategory;
-                };
-                originalName = newName;
-            }
-        }
+        CategoryMacroParser.ParsedName parsed = CategoryMacroParser.parse(request.getName(), request.getCategory());
 
         DishNutritionCalculationRequest calcReq = new DishNutritionCalculationRequest(request.getIngredients());
         DishNutritionResponse nutrition = calculateNutrition(calcReq);
 
         Dish dish = Dish.builder()
-                .name(originalName)
-                .category(determinedCategory)
+                .name(parsed.name())
+                .category(parsed.category())
                 .calories(nutrition.getCalories())
                 .proteins(nutrition.getProteins())
                 .fats(nutrition.getFats())
@@ -82,7 +62,7 @@ public class DishService {
 
         for (IngredientCalculationRequest ingReq : request.getIngredients()) {
             Product product = productRepository.findById(ingReq.getProductId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+                    .orElseThrow(() -> new ResourceNotFoundException("Product", ingReq.getProductId().toString()));
             DishIngredient ing = DishIngredient.builder()
                     .product(product)
                     .weight(ingReq.getWeight())
@@ -99,8 +79,9 @@ public class DishService {
         }
         dish.setFlags(validFlags);
 
-        if (request.getPhotos() != null && !request.getPhotos().isEmpty()) {
-            savePhotos(dish, request.getPhotos());
+        List<MultipartFile> validFiles = fileStorageService.filterValidFiles(request.getPhotos());
+        if (!validFiles.isEmpty()) {
+            savePhotos(dish, validFiles);
         }
 
         return mapToDto(dishRepository.save(dish));
@@ -110,33 +91,13 @@ public class DishService {
     public DishDto updateDish(UUID id, DishUpdateRequest request) {
         Dish dish = dishRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Dish", id.toString()));
 
-        String originalName = request.getName();
-        DishCategory determinedCategory = request.getCategory();
-
-        if (originalName.startsWith("!")) {
-            int firstSpace = originalName.indexOf(" ");
-            if (firstSpace > 1) {
-                String macro = originalName.substring(1, firstSpace).toLowerCase();
-                String newName = originalName.substring(firstSpace + 1);
-
-                determinedCategory = switch (macro) {
-                    case "десерт" -> DishCategory.DESSERT;
-                    case "первое", "суп" -> DishCategory.SOUP;
-                    case "второе" -> DishCategory.SECOND;
-                    case "напиток" -> DishCategory.DRINK;
-                    case "салат" -> DishCategory.SALAD;
-                    case "закуска" -> DishCategory.SNACK;
-                    default -> determinedCategory;
-                };
-                originalName = newName;
-            }
-        }
+        CategoryMacroParser.ParsedName parsed = CategoryMacroParser.parse(request.getName(), request.getCategory());
 
         DishNutritionCalculationRequest calcReq = new DishNutritionCalculationRequest(request.getIngredients());
         DishNutritionResponse nutrition = calculateNutrition(calcReq);
 
-        dish.setName(originalName);
-        dish.setCategory(determinedCategory);
+        dish.setName(parsed.name());
+        dish.setCategory(parsed.category());
         dish.setCalories(nutrition.getCalories());
         dish.setProteins(nutrition.getProteins());
         dish.setFats(nutrition.getFats());
@@ -146,7 +107,7 @@ public class DishService {
         dish.getIngredients().clear();
         for (IngredientCalculationRequest ingReq : request.getIngredients()) {
             Product product = productRepository.findById(ingReq.getProductId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+                    .orElseThrow(() -> new ResourceNotFoundException("Product", ingReq.getProductId().toString()));
             DishIngredient ing = DishIngredient.builder()
                     .product(product)
                     .weight(ingReq.getWeight())
@@ -181,15 +142,16 @@ public class DishService {
         List<String> urlsToDelete = dish.getPhotos().stream()
                 .map(DishPhoto::getPhotoUrl)
                 .filter(url -> !keepUrls.contains(url))
-                .collect(Collectors.toList());
+                .toList();
         
         if (!urlsToDelete.isEmpty()) {
             fileStorageService.deleteFiles(urlsToDelete);
         }
         dish.getPhotos().removeIf(p -> !keepUrls.contains(p.getPhotoUrl()));
 
-        if (request.getPhotos() != null && !request.getPhotos().isEmpty()) {
-            List<UploadedFile> uploaded = fileStorageService.saveFiles(request.getPhotos());
+        List<MultipartFile> validNewFiles = fileStorageService.filterValidFiles(request.getPhotos());
+        if (!validNewFiles.isEmpty()) {
+            List<UploadedFile> uploaded = fileStorageService.saveFiles(validNewFiles);
             for (UploadedFile f : uploaded) {
                 dish.addPhoto(DishPhoto.builder().photoUrl(f.getUrl()).build());
             }
@@ -212,7 +174,7 @@ public class DishService {
 
         for (IngredientCalculationRequest item : request.getIngredients()) {
             Product p = productRepository.findById(item.getProductId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Product not found: " + item.getProductId()));
+                    .orElseThrow(() -> new ResourceNotFoundException("Product", item.getProductId().toString()));
             double f = item.getWeight() / 100.0;
             totalWeight += item.getWeight();
             totalCal += p.getCalories() * f;

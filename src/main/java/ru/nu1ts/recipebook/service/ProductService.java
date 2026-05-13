@@ -66,7 +66,7 @@ public class ProductService {
                 .flags(request.getFlags() != null ? request.getFlags() : new ArrayList<>())
                 .build();
 
-        List<MultipartFile> validFiles = filterValidFiles(request.getPhotos());
+        List<MultipartFile> validFiles = fileStorageService.filterValidFiles(request.getPhotos());
         if (!validFiles.isEmpty()) {
             savePhotos(product, validFiles);
         }
@@ -134,7 +134,7 @@ public class ProductService {
 
         product.getPhotos().removeIf(photo -> !keepUrls.contains(photo.getPhotoUrl()));
 
-        List<MultipartFile> validNewFiles = filterValidFiles(request.getPhotos());
+        List<MultipartFile> validNewFiles = fileStorageService.filterValidFiles(request.getPhotos());
         if (!validNewFiles.isEmpty()) {
             List<UploadedFile> uploadedFiles = fileStorageService.saveFiles(validNewFiles);
             for (UploadedFile uploaded : uploadedFiles) {
@@ -160,15 +160,6 @@ public class ProductService {
                     .build();
             product.addPhoto(photo);
         }
-    }
-
-    private List<MultipartFile> filterValidFiles(List<MultipartFile> files) {
-        if (files == null || files.isEmpty()) {
-            return Collections.emptyList();
-        }
-        return files.stream()
-                .filter(file -> file != null && !file.isEmpty())
-                .toList();
     }
 
     private ProductListItem mapToListItem(Product product) {

@@ -38,7 +38,7 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Product {
+public class Product implements PhotoManaged<ProductPhoto> {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
