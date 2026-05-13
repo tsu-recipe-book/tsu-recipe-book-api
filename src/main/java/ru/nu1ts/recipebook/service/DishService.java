@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import ru.nu1ts.recipebook.dto.*;
+import ru.nu1ts.recipebook.exception.BusinessException;
 import ru.nu1ts.recipebook.exception.ResourceNotFoundException;
 import ru.nu1ts.recipebook.model.entity.Dish;
 import ru.nu1ts.recipebook.model.entity.DishIngredient;
@@ -61,6 +62,8 @@ public class DishService {
         double carbohydrates= resolveValue(request.getCarbohydrates(), nutrition.getCarbohydrates());
         double portionSize  = resolveValue(request.getPortionSize(),   nutrition.getPortionSize());
 
+        validateNutrition(proteins, fats, carbohydrates, portionSize);
+
         Dish dish = Dish.builder()
                 .name(parsed.name())
                 .category(parsed.category())
@@ -98,6 +101,8 @@ public class DishService {
         double fats         = resolveValue(request.getFats(),          nutrition.getFats());
         double carbohydrates= resolveValue(request.getCarbohydrates(), nutrition.getCarbohydrates());
         double portionSize  = resolveValue(request.getPortionSize(),   nutrition.getPortionSize());
+
+        validateNutrition(proteins, fats, carbohydrates, portionSize);
 
         dish.setName(parsed.name());
         dish.setCategory(parsed.category());
@@ -250,6 +255,14 @@ public class DishService {
     private Dish findDishOrThrow(UUID id) {
         return dishRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Dish", id.toString()));
+    }
+
+    private void validateNutrition(Double proteins, Double fats, Double carbohydrates, Double portionSize) {
+        if ((proteins + fats + carbohydrates) * 100.0 / portionSize > 100.0 + 1e-9) {
+            throw new BusinessException(
+                    ru.nu1ts.recipebook.exception.ErrorCode.BJU_SUM_EXCEEDED,
+                    "The amount of BJU per 100 grams of the finished dish cannot exceed 100");
+        }
     }
 
     private double round1(double value) {
