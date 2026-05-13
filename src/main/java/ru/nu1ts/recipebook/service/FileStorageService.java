@@ -15,6 +15,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -24,15 +25,24 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class FileStorageService {
 
-    private final FileUploadProperties props;
+    private final FileUploadProperties properties;
+
+    public List<MultipartFile> filterValidFiles(List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return files.stream()
+                .filter(file -> file != null && !file.isEmpty())
+                .toList();
+    }
 
     @PostConstruct
     void init() {
         try {
-            Files.createDirectories(props.getUploadPath());
-            log.info("Upload directory initialized: {}", props.getUploadPath().toAbsolutePath());
+            Files.createDirectories(properties.getUploadPath());
+            log.info("Upload directory initialized: {}", properties.getUploadPath().toAbsolutePath());
         } catch (IOException e) {
-            throw new RuntimeException("Cannot create upload directory: " + props.getUploadPath(), e);
+            throw new RuntimeException("Cannot create upload directory: " + properties.getUploadPath(), e);
         }
     }
 
@@ -41,9 +51,9 @@ public class FileStorageService {
             return List.of();
         }
 
-        if (files.size() > props.getMaxFilesPerItem()) {
+        if (files.size() > properties.getMaxFilesPerItem()) {
             throw new BusinessException(ErrorCode.TOO_MANY_FILES,
-                    "Too many files. Maximum allowed: " + props.getMaxFilesPerItem());
+                    "Too many files. Maximum allowed: " + properties.getMaxFilesPerItem());
         }
 
         return files.stream()
@@ -57,7 +67,7 @@ public class FileStorageService {
         String originalName = file.getOriginalFilename();
         String extension = getExtension(originalName);
         String storedName = UUID.randomUUID() + "." + extension;
-        Path targetPath = props.getUploadPath().resolve(storedName);
+        Path targetPath = properties.getUploadPath().resolve(storedName);
 
         try (InputStream in = file.getInputStream()) {
             Files.copy(in, targetPath, StandardCopyOption.REPLACE_EXISTING);
@@ -87,7 +97,7 @@ public class FileStorageService {
             return;
         }
 
-        Path filePath = props.getUploadPath().resolve(fileName);
+        Path filePath = properties.getUploadPath().resolve(fileName);
         try {
             boolean deleted = Files.deleteIfExists(filePath);
             if (deleted) {
@@ -100,11 +110,19 @@ public class FileStorageService {
         }
     }
 
-    public void deleteFiles(List<String> fileUrls) {
-        if (fileUrls == null) {
-            return;
+    public void deleteFiles(List<String> urls) {
+        if (urls != null) {
+            urls.forEach(this::deleteFile);
         }
-        fileUrls.forEach(this::deleteFile);
+    }
+
+    public void deleteUnusedFiles(List<String> currentUrls, List<String> keepUrls) {
+        List<String> urlsToDelete = currentUrls.stream()
+                .filter(url -> !keepUrls.contains(url))
+                .toList();
+        if (!urlsToDelete.isEmpty()) {
+            deleteFiles(urlsToDelete);
+        }
     }
 
     private void validateFile(MultipartFile file) {
@@ -113,21 +131,21 @@ public class FileStorageService {
                     "Uploaded file is empty");
         }
 
-        if (file.getSize() > props.getMaxFileSize()) {
+        if (file.getSize() > properties.getMaxFileSize()) {
             throw new BusinessException(ErrorCode.FILE_TOO_LARGE,
-                    "File is too large. Maximum allowed: " + props.getMaxFileSize() / (1024 * 1024) + "MB");
+                    "File is too large. Maximum allowed: " + properties.getMaxFileSize() / (1024 * 1024) + "MB");
         }
 
         String contentType = file.getContentType();
-        if (contentType != null && !props.getAllowedContentTypes().contains(contentType)) {
+        if (contentType != null && !properties.getAllowedContentTypes().contains(contentType)) {
             throw new BusinessException(ErrorCode.INVALID_FILE_TYPE,
                     "File type '" + contentType + "' is not allowed");
         }
 
         String extension = getExtension(file.getOriginalFilename());
-        if (extension == null || !props.getAllowedExtensions().contains(extension.toLowerCase())) {
+        if (extension == null || !properties.getAllowedExtensions().contains(extension.toLowerCase())) {
             throw new BusinessException(ErrorCode.INVALID_FILE_TYPE,
-                    "File extension is not allowed. Allowed: " + String.join(", ", props.getAllowedExtensions()));
+                    "File extension is not allowed. Allowed: " + String.join(", ", properties.getAllowedExtensions()));
         }
     }
 

@@ -16,7 +16,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Dish {
+public class Dish implements PhotoManaged<DishPhoto> {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -62,11 +62,6 @@ public class Dish {
     public void addPhoto(DishPhoto photo) {
         photos.add(photo);
         photo.setDish(this);
-    }
-
-    public void removePhoto(DishPhoto photo) {
-        photos.remove(photo);
-        photo.setDish(null);
     }
 
     public void addIngredient(DishIngredient ingredient) {

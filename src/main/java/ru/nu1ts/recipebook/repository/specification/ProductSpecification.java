@@ -1,6 +1,5 @@
 package ru.nu1ts.recipebook.repository.specification;
 
-import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 import ru.nu1ts.recipebook.model.entity.Product;
@@ -22,23 +21,14 @@ public class ProductSpecification {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            if (search != null && !search.isBlank()) {
-                predicates.add(cb.like(cb.lower(root.get("name")), "%" + search.toLowerCase() + "%"));
-            }
-
-            if (category != null) {
-                predicates.add(cb.equal(root.get("category"), category));
-            }
+            BaseSpecification.addSearchPredicate(search, root, cb, predicates);
+            BaseSpecification.addCategoryPredicate(category, root, cb, predicates);
 
             if (cookingRequired != null) {
                 predicates.add(cb.equal(root.get("cookingRequired"), cookingRequired));
             }
 
-            if (flags != null && !flags.isEmpty()) {
-                for (ProductFlag flag : flags) {
-                    predicates.add(cb.isMember(flag, root.get("flags")));
-                }
-            }
+            BaseSpecification.addFlagsPredicate(flags, root, cb, predicates);
 
             return cb.and(predicates.toArray(new Predicate[0]));
         };

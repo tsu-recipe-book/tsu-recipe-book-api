@@ -48,7 +48,7 @@ public class ProductService {
     @Transactional(readOnly = true)
     public ProductDto getProductById(UUID productId) {
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + productId));
+                .orElseThrow(() -> new ResourceNotFoundException("Product", productId.toString()));
         return mapToDto(product);
     }
 
@@ -66,7 +66,7 @@ public class ProductService {
                 .flags(request.getFlags() != null ? request.getFlags() : new ArrayList<>())
                 .build();
 
-        List<MultipartFile> validFiles = filterValidFiles(request.getPhotos());
+        List<MultipartFile> validFiles = fileStorageService.filterValidFiles(request.getPhotos());
         if (!validFiles.isEmpty()) {
             savePhotos(product, validFiles);
         }
@@ -77,7 +77,7 @@ public class ProductService {
     @Transactional
     public ProductDto updateProduct(UUID productId, ProductUpdateRequest request) {
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + productId));
+                .orElseThrow(() -> new ResourceNotFoundException("Product", productId.toString()));
 
         product.setName(request.getName());
         product.setCalories(request.getCalories());
@@ -89,7 +89,8 @@ public class ProductService {
         product.setCookingRequired(request.getCookingRequired());
         product.setFlags(request.getFlags() != null ? request.getFlags() : new ArrayList<>());
 
-        updatePhotos(product, request);
+        List<String> keepUrls = request.getPhotosToKeep() != null ? request.getPhotosToKeep() : new ArrayList<>();
+        updatePhotos(product, keepUrls, request.getPhotos());
 
         return mapToDto(productRepository.save(product));
     }
@@ -97,7 +98,7 @@ public class ProductService {
     @Transactional
     public void deleteProduct(UUID productId) {
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + productId));
+                .orElseThrow(() -> new ResourceNotFoundException("Product", productId.toString()));
 
         List<Object[]> dishData = dishIngredientRepository.findDishRefsByProductId(productId);
         if (!dishData.isEmpty()) {
@@ -118,23 +119,11 @@ public class ProductService {
         productRepository.delete(product);
     }
 
-    private void updatePhotos(Product product, ProductUpdateRequest request) {
-        List<String> keepUrls = request.getPhotosToKeep() != null
-                ? request.getPhotosToKeep()
-                : new ArrayList<>();
-
-        List<String> urlsToDelete = product.getPhotos().stream()
-                .map(ProductPhoto::getPhotoUrl)
-                .filter(url -> !keepUrls.contains(url))
-                .toList();
-
-        if (!urlsToDelete.isEmpty()) {
-            fileStorageService.deleteFiles(urlsToDelete);
-        }
-
+    private void updatePhotos(Product product, List<String> keepUrls, List<MultipartFile> newFiles) {
+        fileStorageService.deleteUnusedFiles(product.getPhotos().stream().map(ProductPhoto::getPhotoUrl).toList(), keepUrls);
         product.getPhotos().removeIf(photo -> !keepUrls.contains(photo.getPhotoUrl()));
 
-        List<MultipartFile> validNewFiles = filterValidFiles(request.getPhotos());
+        List<MultipartFile> validNewFiles = fileStorageService.filterValidFiles(newFiles);
         if (!validNewFiles.isEmpty()) {
             List<UploadedFile> uploadedFiles = fileStorageService.saveFiles(validNewFiles);
             for (UploadedFile uploaded : uploadedFiles) {
@@ -160,15 +149,6 @@ public class ProductService {
                     .build();
             product.addPhoto(photo);
         }
-    }
-
-    private List<MultipartFile> filterValidFiles(List<MultipartFile> files) {
-        if (files == null || files.isEmpty()) {
-            return Collections.emptyList();
-        }
-        return files.stream()
-                .filter(file -> file != null && !file.isEmpty())
-                .toList();
     }
 
     private ProductListItem mapToListItem(Product product) {

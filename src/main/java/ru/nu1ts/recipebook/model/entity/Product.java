@@ -38,7 +38,7 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Product {
+public class Product implements PhotoManaged<ProductPhoto> {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -86,16 +86,6 @@ public class Product {
     public void addPhoto(ProductPhoto photo) {
         photos.add(photo);
         photo.setProduct(this);
-    }
-
-    public void setPhotos(List<ProductPhoto> photoList) {
-        this.photos.clear();
-        if (photoList != null) {
-            photoList.forEach(photo -> {
-                photo.setProduct(this);
-                this.photos.add(photo);
-            });
-        }
     }
 
     @CreationTimestamp(source = SourceType.DB)
