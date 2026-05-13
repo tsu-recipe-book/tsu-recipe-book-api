@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import ru.nu1ts.recipebook.dto.*;
 import ru.nu1ts.recipebook.exception.BusinessException;
+import ru.nu1ts.recipebook.exception.ErrorCode;
 import ru.nu1ts.recipebook.exception.ResourceNotFoundException;
 import ru.nu1ts.recipebook.model.entity.Dish;
 import ru.nu1ts.recipebook.model.entity.DishIngredient;
@@ -56,11 +57,11 @@ public class DishService {
         DishNutritionResponse nutrition =
                 calculateNutrition(new DishNutritionCalculationRequest(request.getIngredients()));
 
-        double calories     = resolveValue(request.getCalories(),      nutrition.getCalories());
-        double proteins     = resolveValue(request.getProteins(),      nutrition.getProteins());
-        double fats         = resolveValue(request.getFats(),          nutrition.getFats());
-        double carbohydrates= resolveValue(request.getCarbohydrates(), nutrition.getCarbohydrates());
-        double portionSize  = resolveValue(request.getPortionSize(),   nutrition.getPortionSize());
+        double calories      = resolveValue(request.getCalories(),       nutrition.getCalories());
+        double proteins      = resolveValue(request.getProteins(),       nutrition.getProteins());
+        double fats          = resolveValue(request.getFats(),           nutrition.getFats());
+        double carbohydrates = resolveValue(request.getCarbohydrates(),  nutrition.getCarbohydrates());
+        double portionSize   = resolveValue(request.getPortionSize(),    nutrition.getPortionSize());
 
         validateNutrition(proteins, fats, carbohydrates, portionSize);
 
@@ -96,11 +97,11 @@ public class DishService {
         DishNutritionResponse nutrition =
                 calculateNutrition(new DishNutritionCalculationRequest(request.getIngredients()));
 
-        double calories     = resolveValue(request.getCalories(),      nutrition.getCalories());
-        double proteins     = resolveValue(request.getProteins(),      nutrition.getProteins());
-        double fats         = resolveValue(request.getFats(),          nutrition.getFats());
-        double carbohydrates= resolveValue(request.getCarbohydrates(), nutrition.getCarbohydrates());
-        double portionSize  = resolveValue(request.getPortionSize(),   nutrition.getPortionSize());
+        double calories      = resolveValue(request.getCalories(),       nutrition.getCalories());
+        double proteins      = resolveValue(request.getProteins(),       nutrition.getProteins());
+        double fats          = resolveValue(request.getFats(),           nutrition.getFats());
+        double carbohydrates = resolveValue(request.getCarbohydrates(),  nutrition.getCarbohydrates());
+        double portionSize   = resolveValue(request.getPortionSize(),    nutrition.getPortionSize());
 
         validateNutrition(proteins, fats, carbohydrates, portionSize);
 
@@ -115,7 +116,7 @@ public class DishService {
         dish.getIngredients().clear();
         updateIngredients(dish, request.getIngredients());
 
-        applyFlags(dish, request.getFlags(), dish.getIngredients());
+        applyFlagsOnUpdate(dish, request.getFlags(), dish.getIngredients());
 
         List<String> keepUrls = request.getPhotosToKeep() != null
                 ? Arrays.asList(request.getPhotosToKeep())
@@ -147,10 +148,10 @@ public class DishService {
                             "Product", item.getProductId().toString()));
             double factor = item.getWeight() / 100.0;
             totalWeight += item.getWeight();
-            totalCal    += p.getCalories()      * factor;
-            totalProt   += p.getProteins()       * factor;
-            totalFat    += p.getFats()           * factor;
-            totalCarb   += p.getCarbohydrates()  * factor;
+            totalCal    += p.getCalories()     * factor;
+            totalProt   += p.getProteins()     * factor;
+            totalFat    += p.getFats()         * factor;
+            totalCarb   += p.getCarbohydrates() * factor;
             products.add(p);
         }
 
@@ -186,16 +187,35 @@ public class DishService {
     private void applyFlags(Dish dish,
                             List<DishFlag> requestedFlags,
                             List<DishIngredient> ingredients) {
-        List<Product> products = ingredients.stream()
-                .map(DishIngredient::getProduct)
-                .toList();
-        Set<DishFlag> available = new HashSet<>(calculateAvailableDishFlags(products));
+        Set<DishFlag> available = getAvailableFlagsSet(ingredients);
 
         List<DishFlag> toSet = (requestedFlags != null)
                 ? requestedFlags.stream().filter(available::contains).toList()
                 : List.of();
 
-        dish.setFlags(toSet);
+        dish.setFlags(new ArrayList<>(toSet));
+    }
+
+    private void applyFlagsOnUpdate(Dish dish,
+                                    List<DishFlag> requestedFlags,
+                                    List<DishIngredient> ingredients) {
+        Set<DishFlag> available = getAvailableFlagsSet(ingredients);
+
+        List<DishFlag> toSet;
+        if (requestedFlags != null) {
+            toSet = requestedFlags.stream().filter(available::contains).toList();
+        } else {
+            toSet = dish.getFlags().stream().filter(available::contains).toList();
+        }
+
+        dish.setFlags(new ArrayList<>(toSet));
+    }
+
+    private Set<DishFlag> getAvailableFlagsSet(List<DishIngredient> ingredients) {
+        List<Product> products = ingredients.stream()
+                .map(DishIngredient::getProduct)
+                .toList();
+        return new HashSet<>(calculateAvailableDishFlags(products));
     }
 
     private List<DishFlag> calculateAvailableDishFlags(List<Product> products) {
@@ -219,8 +239,8 @@ public class DishService {
         List<MultipartFile> validNewFiles = fileStorageService.filterValidFiles(newFiles);
         int totalCount = keepUrls.size() + validNewFiles.size();
         if (totalCount > fileStorageService.getMaxFilesPerItem()) {
-            throw new ru.nu1ts.recipebook.exception.BusinessException(
-                    ru.nu1ts.recipebook.exception.ErrorCode.TOO_MANY_FILES,
+            throw new BusinessException(
+                    ErrorCode.TOO_MANY_FILES,
                     "Total photos cannot exceed " + fileStorageService.getMaxFilesPerItem()
                             + ". Keeping: " + keepUrls.size()
                             + ", new: " + validNewFiles.size());
@@ -234,7 +254,10 @@ public class DishService {
         if (!validNewFiles.isEmpty()) {
             List<UploadedFile> uploaded = fileStorageService.saveFiles(validNewFiles);
             for (UploadedFile f : uploaded) {
-                dish.addPhoto(DishPhoto.builder().photoUrl(f.getUrl()).build());
+                dish.addPhoto(DishPhoto.builder()
+                        .photoUrl(f.getUrl())
+                        .sortOrder(dish.getPhotos().size())
+                        .build());
             }
         }
         for (int i = 0; i < dish.getPhotos().size(); i++) {
@@ -258,10 +281,15 @@ public class DishService {
     }
 
     private void validateNutrition(Double proteins, Double fats, Double carbohydrates, Double portionSize) {
-        if ((proteins + fats + carbohydrates) * 100.0 / portionSize > 100.0 + 1e-9) {
-            throw new BusinessException(
-                    ru.nu1ts.recipebook.exception.ErrorCode.BJU_SUM_EXCEEDED,
-                    "The amount of BJU per 100 grams of the finished dish cannot exceed 100");
+        if (portionSize == null || portionSize <= 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "Portion size must be greater than 0");
+        }
+        double bjuPer100g = (proteins + fats + carbohydrates) * 100.0 / portionSize;
+        if (bjuPer100g > 100.0 + 1e-9) {
+            throw new BusinessException(ErrorCode.BJU_SUM_EXCEEDED,
+                    "The sum of proteins, fats and carbohydrates per 100g of the dish cannot exceed 100. "
+                            + "Calculated: " + String.format("%.2f", bjuPer100g) + "g/100g");
         }
     }
 

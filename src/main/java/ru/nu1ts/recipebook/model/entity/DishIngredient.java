@@ -6,13 +6,22 @@ import lombok.*;
 import java.util.UUID;
 
 @Entity
-@Table(name = "dish_ingredients")
+@Table(
+        name = "dish_ingredients",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uq_dish_ingredients_dish_product",
+                        columnNames = {"dish_id", "product_id"}
+                )
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class DishIngredient {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
