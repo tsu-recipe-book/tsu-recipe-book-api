@@ -110,11 +110,19 @@ public class FileStorageService {
         }
     }
 
-    public void deleteFiles(List<String> fileUrls) {
-        if (fileUrls == null) {
-            return;
+    public void deleteFiles(List<String> urls) {
+        if (urls != null) {
+            urls.forEach(this::deleteFile);
         }
-        fileUrls.forEach(this::deleteFile);
+    }
+
+    public void deleteUnusedFiles(List<String> currentUrls, List<String> keepUrls) {
+        List<String> urlsToDelete = currentUrls.stream()
+                .filter(url -> !keepUrls.contains(url))
+                .toList();
+        if (!urlsToDelete.isEmpty()) {
+            deleteFiles(urlsToDelete);
+        }
     }
 
     private void validateFile(MultipartFile file) {

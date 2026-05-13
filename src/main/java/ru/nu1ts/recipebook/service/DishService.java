@@ -92,7 +92,8 @@ public class DishService {
         updateIngredients(dish, request.getIngredients());
         updateFlagsFromIngredients(dish);
 
-        updatePhotos(dish, request);
+        List<String> keepUrls = request.getPhotosToKeep() != null ? Arrays.asList(request.getPhotosToKeep()) : new ArrayList<>();
+        updatePhotos(dish, keepUrls, request.getPhotos());
 
         return mapToDto(dishRepository.save(dish));
     }
@@ -128,20 +129,11 @@ public class DishService {
         dish.setFlags(validFlags);
     }
 
-    private void updatePhotos(Dish dish, DishUpdateRequest request) {
-        List<String> keepUrls = request.getPhotosToKeep() != null ? Arrays.asList(request.getPhotosToKeep()) : new ArrayList<>();
-        
-        List<String> urlsToDelete = dish.getPhotos().stream()
-                .map(DishPhoto::getPhotoUrl)
-                .filter(url -> !keepUrls.contains(url))
-                .toList();
-        
-        if (!urlsToDelete.isEmpty()) {
-            fileStorageService.deleteFiles(urlsToDelete);
-        }
+    private void updatePhotos(Dish dish, List<String> keepUrls, List<MultipartFile> newFiles) {
+        fileStorageService.deleteUnusedFiles(dish.getPhotos().stream().map(DishPhoto::getPhotoUrl).toList(), keepUrls);
         dish.getPhotos().removeIf(p -> !keepUrls.contains(p.getPhotoUrl()));
 
-        List<MultipartFile> validNewFiles = fileStorageService.filterValidFiles(request.getPhotos());
+        List<MultipartFile> validNewFiles = fileStorageService.filterValidFiles(newFiles);
         if (!validNewFiles.isEmpty()) {
             List<UploadedFile> uploaded = fileStorageService.saveFiles(validNewFiles);
             for (UploadedFile f : uploaded) {
