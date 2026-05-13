@@ -7,6 +7,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import ru.nu1ts.recipebook.dto.*;
+import ru.nu1ts.recipebook.exception.BusinessException;
+import ru.nu1ts.recipebook.exception.ErrorCode;
 import ru.nu1ts.recipebook.exception.ProductDeleteConflictException;
 import ru.nu1ts.recipebook.exception.ResourceNotFoundException;
 import ru.nu1ts.recipebook.model.entity.Product;
@@ -54,6 +56,7 @@ public class ProductService {
 
     @Transactional
     public ProductDto createProduct(ProductCreateRequest request) {
+        validateNutrition(request.getProteins(), request.getFats(), request.getCarbohydrates());
         Product product = Product.builder()
                 .name(request.getName())
                 .calories(request.getCalories())
@@ -76,6 +79,7 @@ public class ProductService {
 
     @Transactional
     public ProductDto updateProduct(UUID productId, ProductUpdateRequest request) {
+        validateNutrition(request.getProteins(), request.getFats(), request.getCarbohydrates());
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new ResourceNotFoundException("Product", productId.toString()));
 
@@ -148,6 +152,12 @@ public class ProductService {
                     .sortOrder(i)
                     .build();
             product.addPhoto(photo);
+        }
+    }
+
+    private void validateNutrition(Double p, Double f, Double c) {
+        if (p + f + c > 100.0) {
+            throw new BusinessException(ErrorCode.BJU_SUM_EXCEEDED, "The amount of BJU per 100 grams cannot exceed 100");
         }
     }
 

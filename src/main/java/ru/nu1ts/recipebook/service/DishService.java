@@ -15,6 +15,8 @@ import ru.nu1ts.recipebook.model.entity.Product;
 import ru.nu1ts.recipebook.model.enums.DishCategory;
 import ru.nu1ts.recipebook.model.enums.DishFlag;
 import ru.nu1ts.recipebook.model.enums.ProductFlag;
+import ru.nu1ts.recipebook.exception.BusinessException;
+import ru.nu1ts.recipebook.exception.ErrorCode;
 import ru.nu1ts.recipebook.repository.DishRepository;
 import ru.nu1ts.recipebook.repository.ProductRepository;
 import ru.nu1ts.recipebook.repository.specification.DishSpecification;
@@ -50,6 +52,8 @@ public class DishService {
         DishNutritionCalculationRequest calcReq = new DishNutritionCalculationRequest(request.getIngredients());
         DishNutritionResponse nutrition = calculateNutrition(calcReq);
 
+        validateNutrition(nutrition);
+
         Dish dish = Dish.builder()
                 .name(parsed.name())
                 .category(parsed.category())
@@ -79,6 +83,8 @@ public class DishService {
 
         DishNutritionCalculationRequest calcReq = new DishNutritionCalculationRequest(request.getIngredients());
         DishNutritionResponse nutrition = calculateNutrition(calcReq);
+
+        validateNutrition(nutrition);
 
         dish.setName(parsed.name());
         dish.setCategory(parsed.category());
@@ -174,6 +180,12 @@ public class DishService {
                 .carbohydrates(Math.round(totalCarb * 10.0) / 10.0)
                 .portionSize(totalWeight)
                 .build();
+    }
+
+    private void validateNutrition(DishNutritionResponse nutrition) {
+        if ((nutrition.getProteins() + nutrition.getFats() + nutrition.getCarbohydrates()) * 100.0 / nutrition.getPortionSize() > 100.0) {
+            throw new BusinessException(ErrorCode.BJU_SUM_EXCEEDED, "The amount of BJU per 100 grams of the finished dish cannot exceed 100");
+        }
     }
 
     private List<ProductFlag> calculateCommonProductFlags(List<DishIngredient> ingredients) {
