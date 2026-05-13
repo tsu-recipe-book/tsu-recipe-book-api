@@ -1,0 +1,118 @@
+name: Recipe Book API CI/CD
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'tsu-recipe-book-api/**'
+      - '.github/workflows/recipe-book.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'tsu-recipe-book-api/**'
+      - '.github/workflows/recipe-book.yml'
+
+env:
+  JAVA_VERSION: '21'
+  DOCKER_IMAGE: ${{ secrets.DOCKER_USERNAME }}/tsu-recipe-book-api
+  DEPLOY_USERNAME: 'deployuser'
+  SERVICE_NAME: 'recipe-book-api'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: Production
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ☕ Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'gradle'
+
+      - name: 📦 Build with Gradle
+        working-directory: ./tsu-recipe-book-api
+        run: |
+          chmod +x gradlew
+          ./gradlew clean bootJar -x test
+
+      - name: 📁 Publish artifacts
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: recipe-book-artifacts
+          path: tsu-recipe-book-api/build/libs/*.jar
+
+      - name: 🔐 Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: 🐳 Build and Push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./tsu-recipe-book-api
+          file: ./tsu-recipe-book-api/Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKER_IMAGE }}:latest
+            ${{ env.DOCKER_IMAGE }}:${{ github.run_number }}
+
+      - name: 🚀 Deploy to Server (SSH)
+        if: github.ref == 'refs/heads/main'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ env.DEPLOY_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            
+            NETWORK_NAME=${{ env.DEPLOY_USERNAME }}_recipe_net
+            
+            echo "🔍 Ensure Docker network exists..."
+            if ! docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
+              echo "🌐 Network $NETWORK_NAME not found. Creating..."
+              docker network create "$NETWORK_NAME"
+            else
+              echo "🌐 Network $NETWORK_NAME already exists."
+            fi
+            
+            echo "📦 Save previous container as a backup..."
+            docker tag recipe-book-api recipe-book-api-backup || true
+            
+            echo "📥 Pull last image..."
+            docker pull ${{ env.DOCKER_IMAGE }}:latest
+            
+            echo "🛑 Stopping and deleting current container..."
+            docker stop recipe-book-api || true
+            docker rm recipe-book-api || true
+            
+            echo "🚀 Launching a new container..."
+            docker run -d --name recipe-book-api \
+              -p 8080:8080 \
+              --env-file /home/${{ env.DEPLOY_USERNAME }}/tsu-recipe-book-api/${{ env.SERVICE_NAME }}.env \
+              --network "$NETWORK_NAME" \
+              ${{ env.DOCKER_IMAGE }}:latest
+
+      - name: 🛠 Rollback
+        if: failure() && github.ref == 'refs/heads/main'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ env.DEPLOY_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "⚠️ Deployment error. Rollback..."
+            docker stop recipe-book-api || true
+            docker rm recipe-book-api || true
+            docker run -d --name recipe-book-api \
+              -p 8080:8080 \
+              --env-file /home/${{ env.DEPLOY_USERNAME }}/tsu-recipe-book-api/${{ env.SERVICE_NAME }}.env \
+              --network ${{ env.DEPLOY_USERNAME }}_recipe_net \
+              recipe-book-api-backup
