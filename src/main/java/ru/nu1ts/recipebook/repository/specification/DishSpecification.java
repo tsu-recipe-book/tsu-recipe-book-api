@@ -14,19 +14,9 @@ public class DishSpecification {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            if (search != null && !search.isBlank()) {
-                predicates.add(cb.like(cb.lower(root.get("name")), "%" + search.toLowerCase() + "%"));
-            }
-
-            if (category != null) {
-                predicates.add(cb.equal(root.get("category"), category));
-            }
-
-            if (flags != null && !flags.isEmpty()) {
-                for (DishFlag flag : flags) {
-                    predicates.add(cb.isMember(flag, root.get("flags")));
-                }
-            }
+            BaseSpecification.addSearchPredicate(search, root, cb, predicates);
+            BaseSpecification.addCategoryPredicate(category, root, cb, predicates);
+            BaseSpecification.addFlagsPredicate(flags, root, cb, predicates);
 
             return cb.and(predicates.toArray(new Predicate[0]));
         };
