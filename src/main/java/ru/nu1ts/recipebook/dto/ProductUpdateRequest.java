@@ -1,9 +1,7 @@
 package ru.nu1ts.recipebook.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.*;
 import lombok.Data;
 import org.springframework.web.multipart.MultipartFile;
 import ru.nu1ts.recipebook.model.enums.CookingRequired;
@@ -16,6 +14,7 @@ import java.util.List;
 @Schema(description = "Запрос на обновление продукта")
 public class ProductUpdateRequest {
     @NotBlank
+    @Size(min = 2)
     @Schema(description = "Название продукта", example = "Куриное филе")
     private String name;
 
@@ -26,16 +25,19 @@ public class ProductUpdateRequest {
 
     @NotNull
     @PositiveOrZero
+    @Max(100)
     @Schema(description = "Белки на 100г", example = "23.1")
     private Double proteins;
 
     @NotNull
     @PositiveOrZero
+    @Max(100)
     @Schema(description = "Жиры на 100г", example = "1.2")
     private Double fats;
 
     @NotNull
     @PositiveOrZero
+    @Max(100)
     @Schema(description = "Углеводы на 100г", example = "0.0")
     private Double carbohydrates;
 
