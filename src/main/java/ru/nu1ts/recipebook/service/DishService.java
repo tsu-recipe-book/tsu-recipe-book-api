@@ -307,7 +307,7 @@ public class DishService {
                 .carbohydrates(dish.getCarbohydrates())
                 .portionSize(dish.getPortionSize())
                 .category(dish.getCategory())
-                .flags(dish.getFlags())
+                .flags(new ArrayList<>(dish.getFlags()))
                 .mainPhoto(dish.getPhotos().isEmpty() ? null
                         : dish.getPhotos().get(0).getPhotoUrl())
                 .build();
@@ -328,7 +328,7 @@ public class DishService {
                 .carbohydrates(dish.getCarbohydrates())
                 .portionSize(dish.getPortionSize())
                 .category(dish.getCategory())
-                .flags(dish.getFlags())
+                .flags(new ArrayList<>(dish.getFlags()))
                 .availableFlags(available)
                 .photos(dish.getPhotos().stream()
                         .map(DishPhoto::getPhotoUrl).toList())
