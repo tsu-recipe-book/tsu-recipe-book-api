@@ -47,14 +47,14 @@ public class Dish implements PhotoManaged<DishPhoto> {
     @Column(nullable = false)
     private DishCategory category;
 
-    @ElementCollection(targetClass = DishFlag.class)
+    @ElementCollection(targetClass = DishFlag.class, fetch = FetchType.EAGER)
     @CollectionTable(name = "dish_flags", joinColumns = @JoinColumn(name = "dish_id"))
     @Enumerated(EnumType.STRING)
     @Column(name = "flag")
     @Builder.Default
     private List<DishFlag> flags = new ArrayList<>();
 
-    @OneToMany(mappedBy = "dish", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "dish", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @OrderBy("sortOrder ASC")
     @Builder.Default
     private List<DishPhoto> photos = new ArrayList<>();
