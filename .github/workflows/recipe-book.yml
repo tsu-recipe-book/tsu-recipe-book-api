@@ -89,6 +89,7 @@ jobs:
             echo "🚀 Launching a new container..."
             docker run -d --name recipe-book-api \
               -p 8081:8080 \
+              -v recipe_book_uploads:/app/uploads \
               --env-file /home/${{ env.DEPLOY_USERNAME }}/tsu-recipe-book-api/${{ env.SERVICE_NAME }}.env \
               --network "$NETWORK_NAME" \
               ${{ env.DOCKER_IMAGE }}:latest
@@ -106,6 +107,7 @@ jobs:
             docker rm recipe-book-api || true
             docker run -d --name recipe-book-api \
               -p 8081:8080 \
+              -v recipe_book_uploads:/app/uploads \
               --env-file /home/${{ env.DEPLOY_USERNAME }}/tsu-recipe-book-api/${{ env.SERVICE_NAME }}.env \
               --network ${{ env.DEPLOY_USERNAME }}_recipe_net \
               recipe-book-api-backup
