@@ -113,7 +113,7 @@ public class DishService {
         dish.setCarbohydrates(carbohydrates);
         dish.setPortionSize(portionSize);
 
-        dish.getIngredients().clear();
+        // Убран dish.getIngredients().clear();
         updateIngredients(dish, request.getIngredients());
 
         applyFlagsOnUpdate(dish, request.getFlags(), dish.getIngredients());
@@ -171,16 +171,40 @@ public class DishService {
         return (userValue != null) ? userValue : calculatedValue;
     }
 
-    private void updateIngredients(Dish dish, List<IngredientCalculationRequest> ingredients) {
-        for (IngredientCalculationRequest ingReq : ingredients) {
-            Product product = productRepository.findById(ingReq.getProductId())
-                    .orElseThrow(() -> new ResourceNotFoundException(
-                            "Product", ingReq.getProductId().toString()));
-            DishIngredient ing = DishIngredient.builder()
-                    .product(product)
-                    .weight(ingReq.getWeight())
-                    .build();
-            dish.addIngredient(ing);
+    private void updateIngredients(Dish dish, List<IngredientCalculationRequest> requestedIngredients) {
+        Set<UUID> uniqueProductIds = requestedIngredients.stream()
+                .map(IngredientCalculationRequest::getProductId)
+                .collect(Collectors.toSet());
+
+        if (uniqueProductIds.size() < requestedIngredients.size()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Request contains duplicate products");
+        }
+
+        dish.getIngredients().removeIf(existingIng -> {
+            boolean toRemove = !uniqueProductIds.contains(existingIng.getProduct().getId());
+            if (toRemove) {
+                existingIng.setDish(null);
+            }
+            return toRemove;
+        });
+
+        for (IngredientCalculationRequest ingReq : requestedIngredients) {
+            Optional<DishIngredient> existingIngredient = dish.getIngredients().stream()
+                    .filter(ing -> ing.getProduct().getId().equals(ingReq.getProductId()))
+                    .findFirst();
+
+            if (existingIngredient.isPresent()) {
+                existingIngredient.get().setWeight(ingReq.getWeight());
+            } else {
+                Product product = productRepository.findById(ingReq.getProductId())
+                        .orElseThrow(() -> new ResourceNotFoundException(
+                                "Product", ingReq.getProductId().toString()));
+                DishIngredient newIng = DishIngredient.builder()
+                        .product(product)
+                        .weight(ingReq.getWeight())
+                        .build();
+                dish.addIngredient(newIng);
+            }
         }
     }
 
