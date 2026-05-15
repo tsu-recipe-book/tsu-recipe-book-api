@@ -59,7 +59,7 @@ class DishServiceTests {
                 .build();
     }
 
-    // Techniques applied: Equivalence Partitioning (EP) and Boundary Value Analysis (BVA)
+    // Techniques applied: Equivalence Partitioning and Boundary Value Analysis
     @ParameterizedTest(name = "Weight: {0}g -> Expected: Cal:{1}, Prot:{2}, Fat:{3}, Carb:{4}")
     @CsvSource({
             "100.0,   250.0,  10.0,    5.0,   40.0",   // EP: Standard portion (multiplier 1.0)
