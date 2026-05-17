@@ -17,6 +17,7 @@ import ru.nu1ts.recipebook.model.entity.Product;
 import ru.nu1ts.recipebook.model.enums.CookingRequired;
 import ru.nu1ts.recipebook.model.enums.DishCategory;
 import ru.nu1ts.recipebook.model.enums.ProductCategory;
+import ru.nu1ts.recipebook.model.enums.ProductFlag;
 import ru.nu1ts.recipebook.repository.DishRepository;
 import ru.nu1ts.recipebook.repository.ProductRepository;
 
@@ -104,6 +105,30 @@ public class ProductApiIntegrationTests {
     }
 
     @Test
+    @DisplayName("Creation: BVA checking for max photos (limit is 5)")
+    void createProduct_MaxPhotosLimitExceeded() throws Exception {
+        MockMultipartHttpServletRequestBuilder request = MockMvcRequestBuilders.multipart("/products");
+        request.param("name", "A product with a bunch of photos")
+                .param("calories", "10.0").param("proteins", "1.0")
+                .param("fats", "1.0").param("carbohydrates", "1.0")
+                .param("category", "VEGETABLES")
+                .param("cookingRequired", "READY_TO_EAT");
+
+        for (int i = 0; i < 6; i++) {
+            request.file(new org.springframework.mock.web.MockMultipartFile(
+                    "photos",
+                    "photo" + i + ".jpg",
+                    "image/jpeg",
+                    "fake image data".getBytes()
+            ));
+        }
+
+        mockMvc.perform(request)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+    }
+
+    @Test
     @DisplayName("Reading: Getting a product by existing ID")
     void getProductById_Success() throws Exception {
         mockMvc.perform(MockMvcRequestBuilders.get("/products/" + testProduct.getId()))
@@ -138,6 +163,28 @@ public class ProductApiIntegrationTests {
     }
 
     @Test
+    @DisplayName("Reading: Filter products by category and flags")
+    void getProductsList_WithCategoryAndFlagFilters() throws Exception {
+        testProduct.getFlags().add(ProductFlag.VEGAN);
+        productRepository.save(testProduct);
+
+        Product meatProduct = Product.builder()
+                .name("Meat")
+                .calories(200.0).proteins(20.0).fats(10.0).carbohydrates(0.0)
+                .category(ProductCategory.MEAT)
+                .cookingRequired(CookingRequired.REQUIRES_COOKING)
+                .build();
+        productRepository.save(meatProduct);
+
+        mockMvc.perform(MockMvcRequestBuilders.get("/products")
+                        .param("category", "VEGETABLES")
+                        .param("flags", "VEGAN"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("Basic product"));
+    }
+
+    @Test
     @DisplayName("Update: Successfully updated product attributes")
     void updateProduct_Success() throws Exception {
         MockMultipartHttpServletRequestBuilder updateReq = MockMvcRequestBuilders.multipart("/products/" + testProduct.getId());
@@ -159,6 +206,25 @@ public class ProductApiIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Updated product"))
                 .andExpect(jsonPath("$.category").value("MEAT"));
+    }
+
+    @Test
+    @DisplayName("Update: EP checking validation works on update (invalid BJU sum)")
+    void updateProduct_InvalidBjuSum_Returns422() throws Exception {
+        MockMultipartHttpServletRequestBuilder updateReq =
+                MockMvcRequestBuilders.multipart(org.springframework.http.HttpMethod.PUT, "/products/" + testProduct.getId());
+
+        updateReq.param("name", "Updated")
+                .param("calories", "100.0")
+                .param("proteins", "50.0")
+                .param("fats", "50.0")
+                .param("carbohydrates", "50.0")
+                .param("category", "MEAT")
+                .param("cookingRequired", "READY_TO_EAT")
+                .contentType(MediaType.MULTIPART_FORM_DATA);
+
+        mockMvc.perform(updateReq)
+                .andExpect(status().isUnprocessableContent());
     }
 
     @Test
