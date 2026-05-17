@@ -63,7 +63,8 @@ public class ProductApiIntegrationTests {
             "50.0, 25.0, 20.0, 201",    // EP: Valid class
             "33.3, 33.3, 33.4, 201",    // BVA: Upper limit is exactly 100.0
             "33.4, 33.4, 33.3, 422",    // BVA: Out of Bounds (100.1) -> Error 422
-            "50.0, 50.0, 50.0, 422"     // EP: Invalid class (150) -> Error 422
+            "150.0, 0.0, 0.0, 400",     // EP: Exceeded the limit of 100 on one element
+            "-0.1, 10.0, 10.0, 400"     // BVA: Value less than 0
     })
     void createProduct_BjuSumValidation(String proteins, String fats, String carbs, int expectedStatus) throws Exception {
         MockMultipartHttpServletRequestBuilder request = MockMvcRequestBuilders.multipart("/products");
@@ -74,6 +75,28 @@ public class ProductApiIntegrationTests {
                 .param("fats", fats)
                 .param("carbohydrates", carbs)
                 .param("category", "MEAT")
+                .param("cookingRequired", "READY_TO_EAT")
+                .contentType(MediaType.MULTIPART_FORM_DATA);
+
+        mockMvc.perform(request).andExpect(status().is(expectedStatus));
+    }
+
+    @DisplayName("Creation: BVA checking for product name length")
+    @ParameterizedTest(name = "Name length={0}, value=''{1}'' -> Expected status: {2}")
+    @CsvSource({
+            "1, A, 400",     // BVA: Less than minimum bound
+            "2, AB, 201",    // BVA: Right on the border
+            "6, Tomato, 201" // EP: Normal valid value
+    })
+    void createProduct_NameLengthValidation(int length, String name, int expectedStatus) throws Exception {
+        MockMultipartHttpServletRequestBuilder request = MockMvcRequestBuilders.multipart("/products");
+
+        request.param("name", name)
+                .param("calories", "100.0")
+                .param("proteins", "10.0")
+                .param("fats", "5.0")
+                .param("carbohydrates", "15.0")
+                .param("category", "VEGETABLES")
                 .param("cookingRequired", "READY_TO_EAT")
                 .contentType(MediaType.MULTIPART_FORM_DATA);
 
