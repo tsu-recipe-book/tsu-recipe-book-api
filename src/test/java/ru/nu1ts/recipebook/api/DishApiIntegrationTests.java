@@ -14,24 +14,30 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.FileSystemUtils;
 import ru.nu1ts.recipebook.dto.DishNutritionCalculationRequest;
+import ru.nu1ts.recipebook.dto.IngredientCalculationRequest;
 import ru.nu1ts.recipebook.model.entity.Dish;
 import ru.nu1ts.recipebook.model.entity.DishIngredient;
 import ru.nu1ts.recipebook.model.entity.Product;
 import ru.nu1ts.recipebook.model.enums.CookingRequired;
 import ru.nu1ts.recipebook.model.enums.DishCategory;
+import ru.nu1ts.recipebook.model.enums.DishFlag;
 import ru.nu1ts.recipebook.model.enums.ProductCategory;
 import ru.nu1ts.recipebook.model.enums.ProductFlag;
 import ru.nu1ts.recipebook.repository.DishRepository;
 import ru.nu1ts.recipebook.repository.ProductRepository;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+// properties = ... перенаправляет сохранение файлов в отдельную папку для тестов (изоляция файловой системы).
+@SpringBootTest(properties = {"app.upload.upload-dir=test-uploads"}, webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 @Transactional
 @DisplayName("API Tests: Dish Management (CRUD)")
@@ -72,6 +78,11 @@ public class DishApiIntegrationTests {
         testDish.addIngredient(DishIngredient.builder().product(veganProduct).weight(100.0).build());
         testDish.addIngredient(DishIngredient.builder().product(meatProduct).weight(100.0).build());
         testDish = dishRepository.save(testDish);
+    }
+
+    @AfterAll
+    static void afterAll() throws IOException {
+        FileSystemUtils.deleteRecursively(Path.of("test-uploads"));
     }
 
     @Test
@@ -144,7 +155,7 @@ public class DishApiIntegrationTests {
             "0.0, 100.0, 100.0, 201",   // BVA: Calories at the lower limit (0)
             "-1.0, 100.0, 100.0, 400",  // BVA: Calories Below Limit
             "150.0, 0.0, 100.0, 400",   // BVA: Portion at invalid boundary (0)
-            "150.0, 0.001, 0.001, 201", // BVA: Portion strictly > 0. Weight proportional to avoid nutrient density explosion
+            "150.0, 0.001, 0.001, 201", // BVA: Portion strictly > 0. Weight proportional
             "150.0, 250.0, 100.0, 201"  // EP: Regular valid values
     })
     void createDish_NumericValuesValidation(String calories, String portion, String weight, int expectedStatus) throws Exception {
@@ -224,6 +235,7 @@ public class DishApiIntegrationTests {
         Dish veganDish = Dish.builder()
                 .name("Vegan soup").category(DishCategory.SOUP)
                 .calories(150.0).proteins(5.0).fats(5.0).carbohydrates(20.0).portionSize(300.0)
+                .flags(List.of(DishFlag.VEGAN))
                 .build();
         veganDish.addIngredient(DishIngredient.builder().product(veganProduct).weight(100.0).build());
         dishRepository.save(veganDish);
@@ -249,6 +261,7 @@ public class DishApiIntegrationTests {
         Dish veganDish = Dish.builder()
                 .name("Vegan salad").category(DishCategory.SALAD)
                 .calories(100.0).proteins(2.0).fats(0.5).carbohydrates(20.0).portionSize(200.0)
+                .flags(List.of(DishFlag.VEGAN))
                 .build();
         veganDish.addIngredient(DishIngredient.builder().product(veganProduct).weight(200.0).build());
         veganDish = dishRepository.save(veganDish);
@@ -273,6 +286,20 @@ public class DishApiIntegrationTests {
     void deleteDish_NotFound() throws Exception {
         mockMvc.perform(MockMvcRequestBuilders.delete("/dishes/" + UUID.randomUUID()))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("Calculator: Correctly calculates nutrition for given ingredients")
+    void calculateNutrition_Success() throws Exception {
+        IngredientCalculationRequest ingredient = new IngredientCalculationRequest(veganProduct.getId(), 200.0);
+        DishNutritionCalculationRequest req = new DishNutritionCalculationRequest(List.of(ingredient));
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/dishes/calculate-nutrition")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.portionSize").value(200.0))
+                .andExpect(jsonPath("$.calories").value(200.0));
     }
 
     @Test
