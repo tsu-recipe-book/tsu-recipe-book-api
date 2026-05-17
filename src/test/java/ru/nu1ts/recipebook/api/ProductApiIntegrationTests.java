@@ -185,6 +185,26 @@ public class ProductApiIntegrationTests {
     }
 
     @Test
+    @DisplayName("Reading: Sorting products by calories descending")
+    void getProductsList_SortedByCalories() throws Exception {
+        Product highCalProduct = Product.builder()
+                .name("High Calorie Product")
+                .calories(500.0).proteins(10.0).fats(10.0).carbohydrates(10.0)
+                .category(ProductCategory.MEAT)
+                .cookingRequired(CookingRequired.READY_TO_EAT)
+                .build();
+        productRepository.save(highCalProduct);
+
+        mockMvc.perform(MockMvcRequestBuilders.get("/products")
+                        .param("sortBy", "calories")
+                        .param("sortOrder", "desc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].name").value("High Calorie Product"))
+                .andExpect(jsonPath("$[1].name").value("Basic product"));
+    }
+
+    @Test
     @DisplayName("Update: Successfully updated product attributes")
     void updateProduct_Success() throws Exception {
         MockMultipartHttpServletRequestBuilder updateReq = MockMvcRequestBuilders.multipart("/products/" + testProduct.getId());
