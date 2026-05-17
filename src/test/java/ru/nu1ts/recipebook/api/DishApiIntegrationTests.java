@@ -27,6 +27,7 @@ import ru.nu1ts.recipebook.repository.DishRepository;
 import ru.nu1ts.recipebook.repository.ProductRepository;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -174,6 +175,14 @@ public class DishApiIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Basic dish"))
                 .andExpect(jsonPath("$.ingredients.length()").value(2));
+    }
+
+    @Test
+    @DisplayName("Reading: Get dish by non-existent ID returns 404")
+    void getDishById_NotFound() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.get("/dishes/" + UUID.randomUUID()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(404));
     }
 
     @Test
