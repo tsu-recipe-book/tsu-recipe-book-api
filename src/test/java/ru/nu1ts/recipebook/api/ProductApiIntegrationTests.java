@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.FileSystemUtils;
 import ru.nu1ts.recipebook.model.entity.Dish;
 import ru.nu1ts.recipebook.model.entity.DishIngredient;
 import ru.nu1ts.recipebook.model.entity.Product;
@@ -22,12 +23,15 @@ import ru.nu1ts.recipebook.model.enums.ProductFlag;
 import ru.nu1ts.recipebook.repository.DishRepository;
 import ru.nu1ts.recipebook.repository.ProductRepository;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+// properties = ... перенаправляет сохранение файлов в отдельную папку для тестов (изоляция файловой системы).
+@SpringBootTest(properties = {"app.upload.upload-dir=test-uploads"}, webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 @Transactional
 @DisplayName("API Tests: Product Management (CRUD)")
@@ -43,6 +47,11 @@ public class ProductApiIntegrationTests {
     private DishRepository dishRepository;
 
     private Product testProduct;
+
+    @AfterAll
+    static void afterAll() throws IOException {
+        FileSystemUtils.deleteRecursively(Path.of("test-uploads"));
+    }
 
     @BeforeEach
     void setUp() {
