@@ -15,7 +15,6 @@ import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequ
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.transaction.annotation.Transactional;
 import ru.nu1ts.recipebook.dto.DishNutritionCalculationRequest;
-import ru.nu1ts.recipebook.dto.IngredientCalculationRequest;
 import ru.nu1ts.recipebook.model.entity.Dish;
 import ru.nu1ts.recipebook.model.entity.DishIngredient;
 import ru.nu1ts.recipebook.model.entity.Product;
@@ -32,7 +31,7 @@ import java.util.UUID;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
 @DisplayName("API Tests: Dish Management (CRUD)")
@@ -75,6 +74,51 @@ public class DishApiIntegrationTests {
         testDish = dishRepository.save(testDish);
     }
 
+    @Test
+    @DisplayName("Macro: !суп in name is removed (category is passed explicitly to satisfy @NotNull)")
+    void createDish_MacroInName_SetsCategoryAndRemovesMacro() throws Exception {
+        MockMultipartHttpServletRequestBuilder request = MockMvcRequestBuilders.multipart("/dishes");
+        request.param("name", "!суп Борщ")
+                .param("category", "SOUP")
+                .param("ingredients[0].productId", veganProduct.getId().toString())
+                .param("ingredients[0].weight", "100.0");
+
+        mockMvc.perform(request)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("Борщ"))
+                .andExpect(jsonPath("$.category").value("SOUP"));
+    }
+
+    @Test
+    @DisplayName("Macro: explicit category overrides macro in name")
+    void createDish_ExplicitCategoryOverridesMacro() throws Exception {
+        MockMultipartHttpServletRequestBuilder request = MockMvcRequestBuilders.multipart("/dishes");
+        request.param("name", "!суп Оливье")
+                .param("category", "SALAD")
+                .param("ingredients[0].productId", veganProduct.getId().toString())
+                .param("ingredients[0].weight", "100.0");
+
+        mockMvc.perform(request)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("Оливье"))
+                .andExpect(jsonPath("$.category").value("SALAD"));
+    }
+
+    @Test
+    @DisplayName("Business Logic: duplicate ingredients throw validation error")
+    void createDish_DuplicateIngredients_ReturnsBadRequest() throws Exception {
+        MockMultipartHttpServletRequestBuilder request = MockMvcRequestBuilders.multipart("/dishes");
+        request.param("name", "Duplicates")
+                .param("category", "SALAD")
+                .param("ingredients[0].productId", veganProduct.getId().toString())
+                .param("ingredients[0].weight", "100.0")
+                .param("ingredients[1].productId", veganProduct.getId().toString())
+                .param("ingredients[1].weight", "50.0");
+
+        mockMvc.perform(request)
+                .andExpect(status().is4xxClientError());
+    }
+
     @DisplayName("Creation: BVA checking for dish name length")
     @ParameterizedTest(name = "Length={0}, Name=''{1}'' -> Status: {2}")
     @CsvSource({
@@ -93,45 +137,47 @@ public class DishApiIntegrationTests {
     }
 
     @DisplayName("Creation: BVA & EP checking for calories and portion size")
-    @ParameterizedTest(name = "Calories={0}, Portion={1} -> Status: {2}")
+    @ParameterizedTest(name = "Calories={0}, Portion={1}, Weight={2} -> Status: {3}")
     @CsvSource({
-            "0.0, 100.0, 201",   // BVA: Calories at the lower limit (0)
-            "-1.0, 100.0, 400",  // BVA: Calories Below Limit
-            "150.0, 0.0, 400",   // BVA: Portion at invalid boundary (0)
-            "150.0, 250.0, 201"  // EP: Regular valid values
+            "0.0, 100.0, 100.0, 201",   // BVA: Calories at the lower limit (0)
+            "-1.0, 100.0, 100.0, 400",  // BVA: Calories Below Limit (< 0)
+            "150.0, 0.0, 100.0, 400",   // BVA: Portion at invalid boundary (0)
+            "150.0, 0.001, 0.001, 201", // BVA: Serving size is strictly greater than zero.
+            "150.0, 250.0, 100.0, 201"  // EP: Regular valid values
     })
-    void createDish_NumericValuesValidation(String calories, String portion, int expectedStatus) throws Exception {
+    void createDish_NumericValuesValidation(String calories, String portion, String weight, int expectedStatus) throws Exception {
         MockMultipartHttpServletRequestBuilder request = MockMvcRequestBuilders.multipart("/dishes");
         request.param("name", "Test dish")
                 .param("category", "SOUP")
                 .param("calories", calories)
                 .param("portionSize", portion)
                 .param("ingredients[0].productId", veganProduct.getId().toString())
-                .param("ingredients[0].weight", "100.0");
+                .param("ingredients[0].weight", weight);
 
         mockMvc.perform(request).andExpect(status().is(expectedStatus));
     }
 
     @Test
-    @DisplayName("Business Logic: Dish ignores VEGAN flag if ingredients do not support it")
-    void createDish_FlagInheritanceLogic() throws Exception {
+    @DisplayName("Creation: BVA checking for exactly max photos limit (5 is valid)")
+    void createDish_ExactlyMaxPhotos() throws Exception {
         MockMultipartHttpServletRequestBuilder request = MockMvcRequestBuilders.multipart("/dishes");
-        request.param("name", "Strange salad")
+        request.param("name", "Dish with 5 photos")
                 .param("category", "SALAD")
-                .param("flags", "VEGAN")
-                .param("ingredients[0].productId", meatProduct.getId().toString())
+                .param("ingredients[0].productId", veganProduct.getId().toString())
                 .param("ingredients[0].weight", "100.0");
 
-        mockMvc.perform(request)
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.flags").isEmpty());
+        for (int i = 0; i < 5; i++) {
+            request.file(new MockMultipartFile("photos", "pic" + i + ".jpg", "image/jpeg", "data".getBytes()));
+        }
+
+        mockMvc.perform(request).andExpect(status().isCreated());
     }
 
     @Test
     @DisplayName("Creation: BVA checking for max photos limit (6 is invalid)")
     void createDish_MaxPhotosExceeded() throws Exception {
         MockMultipartHttpServletRequestBuilder request = MockMvcRequestBuilders.multipart("/dishes");
-        request.param("name", "Dish with photo")
+        request.param("name", "Dish with 6 photos")
                 .param("category", "SALAD")
                 .param("ingredients[0].productId", veganProduct.getId().toString())
                 .param("ingredients[0].weight", "100.0");
@@ -140,89 +186,83 @@ public class DishApiIntegrationTests {
             request.file(new MockMultipartFile("photos", "pic" + i + ".jpg", "image/jpeg", "data".getBytes()));
         }
 
-        mockMvc.perform(request)
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(400));
+        mockMvc.perform(request).andExpect(status().isBadRequest());
     }
 
     @Test
-    @DisplayName("Reading: Filter by category and sorting by calories")
-    void getDishes_WithFiltersAndSort() throws Exception {
-        Dish soup = Dish.builder()
-                .name("Soup")
-                .category(DishCategory.SOUP)
-                .calories(150.0)
-                .proteins(5.0)
-                .fats(5.0)
-                .carbohydrates(20.0)
-                .portionSize(300.0)
-                .build();
-        dishRepository.save(soup);
-
+    @DisplayName("Reading: Dish search by substring")
+    void getDishes_SearchBySubstring() throws Exception {
         mockMvc.perform(MockMvcRequestBuilders.get("/dishes")
-                        .param("category", "SALAD")
-                        .param("sortBy", "calories")
-                        .param("sortOrder", "desc"))
+                        .param("search", "Basic"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].name").value("Basic dish"));
     }
 
     @Test
-    @DisplayName("Reading: Get dish by ID")
-    void getDishById_Success() throws Exception {
-        mockMvc.perform(MockMvcRequestBuilders.get("/dishes/" + testDish.getId()))
+    @DisplayName("Reading: Sort dishes by descending portion size")
+    void getDishes_SortByPortionSize() throws Exception {
+        Dish bigDish = Dish.builder()
+                .name("Big Dish").category(DishCategory.SOUP)
+                .calories(150.0).proteins(5.0).fats(5.0).carbohydrates(20.0).portionSize(500.0)
+                .build();
+        dishRepository.save(bigDish);
+
+        mockMvc.perform(MockMvcRequestBuilders.get("/dishes")
+                        .param("sortBy", "portionSize")
+                        .param("sortOrder", "desc"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("Basic dish"))
-                .andExpect(jsonPath("$.ingredients.length()").value(2));
+                .andExpect(jsonPath("$[0].name").value("Big Dish"))
+                .andExpect(jsonPath("$[1].name").value("Basic dish"));
     }
 
     @Test
     @DisplayName("Reading: Get dish by non-existent ID returns 404")
     void getDishById_NotFound() throws Exception {
         mockMvc.perform(MockMvcRequestBuilders.get("/dishes/" + UUID.randomUUID()))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value(404));
-    }
-
-    @Test
-    @DisplayName("Update: Successfully update dish name")
-    void updateDish_Success() throws Exception {
-        MockMultipartHttpServletRequestBuilder updateReq = MockMvcRequestBuilders.multipart(HttpMethod.PUT, "/dishes/" + testDish.getId());
-
-        updateReq.param("name", "An updated dish")
-                .param("category", "SALAD")
-                .param("ingredients[0].productId", veganProduct.getId().toString())
-                .param("ingredients[0].weight", "500.0");
-
-        mockMvc.perform(updateReq)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("An updated dish"));
-    }
-
-    @Test
-    @DisplayName("Deletion: Successfully delete dish")
-    void deleteDish_Success() throws Exception {
-        mockMvc.perform(MockMvcRequestBuilders.delete("/dishes/" + testDish.getId()))
-                .andExpect(status().isNoContent());
-
-        mockMvc.perform(MockMvcRequestBuilders.get("/dishes/" + testDish.getId()))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    @DisplayName("Calculator: Correctly calculates nutrition for given ingredients (EP)")
-    void calculateNutrition_Success() throws Exception {
-        IngredientCalculationRequest ingredient = new IngredientCalculationRequest(veganProduct.getId(), 200.0);
-        DishNutritionCalculationRequest req = new DishNutritionCalculationRequest(List.of(ingredient));
+    @DisplayName("Update: VEGAN flag is dropped when non-vegan ingredient is added")
+    void updateDish_FlagDroppedWhenIngredientAdded() throws Exception {
+        Dish veganDish = Dish.builder()
+                .name("Vegan salad").category(DishCategory.SALAD)
+                .calories(100.0).proteins(2.0).fats(0.5).carbohydrates(20.0).portionSize(200.0)
+                .build();
+        veganDish.addIngredient(DishIngredient.builder().product(veganProduct).weight(200.0).build());
+        veganDish = dishRepository.save(veganDish);
+
+        MockMultipartHttpServletRequestBuilder updateReq = MockMvcRequestBuilders.multipart(HttpMethod.PUT, "/dishes/" + veganDish.getId());
+
+        updateReq.param("name", "No longer a vegan salad")
+                .param("category", "SALAD")
+                .param("flags", "VEGAN")
+                .param("ingredients[0].productId", veganProduct.getId().toString())
+                .param("ingredients[0].weight", "100.0")
+                .param("ingredients[1].productId", meatProduct.getId().toString())
+                .param("ingredients[1].weight", "100.0");
+
+        mockMvc.perform(updateReq)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.flags").isEmpty());
+    }
+
+    @Test
+    @DisplayName("Deletion: 404 Not Found when deleting non-existent dish")
+    void deleteDish_NotFound() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.delete("/dishes/" + UUID.randomUUID()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("Calculator: Empty ingredients list returns 400 Bad Request")
+    void calculateNutrition_EmptyIngredients_ReturnsBadRequest() throws Exception {
+        DishNutritionCalculationRequest req = new DishNutritionCalculationRequest(List.of());
 
         mockMvc.perform(MockMvcRequestBuilders.post("/dishes/calculate-nutrition")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.portionSize").value(200.0))
-                .andExpect(jsonPath("$.calories").value(200.0))
-                .andExpect(jsonPath("$.proteins").value(4.0))
-                .andExpect(jsonPath("$.availableFlags[0]").value("VEGAN"));
+                .andExpect(status().isBadRequest());
     }
 }

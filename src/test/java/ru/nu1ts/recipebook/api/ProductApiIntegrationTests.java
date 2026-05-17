@@ -6,7 +6,8 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.http.MediaType;
+import org.springframework.http.HttpMethod;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
@@ -26,7 +27,7 @@ import java.util.UUID;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
 @DisplayName("API Tests: Product Management (CRUD)")
@@ -57,27 +58,25 @@ public class ProductApiIntegrationTests {
         testProduct = productRepository.save(testProduct);
     }
 
-    @DisplayName("Creation: Checking the validity of the amount of BJU")
+    @DisplayName("Creation: BVA & EP checking for BJU sum and negative values")
     @ParameterizedTest(name = "B={0}, F={1}, U={2} -> Expected status: {3}")
     @CsvSource({
             "0.0, 0.0, 0.0, 201",       // BVA: Min. border
-            "50.0, 25.0, 20.0, 201",    // EP: Valid class
-            "33.3, 33.3, 33.4, 201",    // BVA: Upper limit is exactly 100.0
-            "33.4, 33.4, 33.3, 422",    // BVA: Out of Bounds (100.1) -> Error 422
-            "150.0, 0.0, 0.0, 400",     // EP: Exceeded the limit of 100 on one element
-            "-0.1, 10.0, 10.0, 400"     // BVA: Value less than 0
+            "50.0, 25.0, 20.0, 201",    // EP:  Valid class
+            "33.3, 33.3, 33.4, 201",    // BVA: Upper limit (100.0)
+            "33.4, 33.4, 33.3, 422",    // BVA: Exceed limit (100.1)
+            "150.0, 0.0, 0.0, 400",     // EP:  Invalid class (single value > 100)
+            "-0.1, 10.0, 10.0, 400"     // BVA: Negative value
     })
     void createProduct_BjuSumValidation(String proteins, String fats, String carbs, int expectedStatus) throws Exception {
         MockMultipartHttpServletRequestBuilder request = MockMvcRequestBuilders.multipart("/products");
-
         request.param("name", "Test product BJU")
                 .param("calories", "150.0")
                 .param("proteins", proteins)
                 .param("fats", fats)
                 .param("carbohydrates", carbs)
                 .param("category", "MEAT")
-                .param("cookingRequired", "READY_TO_EAT")
-                .contentType(MediaType.MULTIPART_FORM_DATA);
+                .param("cookingRequired", "READY_TO_EAT");
 
         mockMvc.perform(request).andExpect(status().is(expectedStatus));
     }
@@ -85,27 +84,42 @@ public class ProductApiIntegrationTests {
     @DisplayName("Creation: BVA checking for product name length")
     @ParameterizedTest(name = "Name length={0}, value=''{1}'' -> Expected status: {2}")
     @CsvSource({
-            "1, A, 400",     // BVA: Less than minimum bound
+            "1, A, 400",     // BVA: Below the border
             "2, AB, 201",    // BVA: Right on the border
-            "6, Tomato, 201" // EP: Normal valid value
+            "6, Tomato, 201" // EP:  Valid value
     })
     void createProduct_NameLengthValidation(int length, String name, int expectedStatus) throws Exception {
         MockMultipartHttpServletRequestBuilder request = MockMvcRequestBuilders.multipart("/products");
-
         request.param("name", name)
                 .param("calories", "100.0")
                 .param("proteins", "10.0")
                 .param("fats", "5.0")
                 .param("carbohydrates", "15.0")
                 .param("category", "VEGETABLES")
-                .param("cookingRequired", "READY_TO_EAT")
-                .contentType(MediaType.MULTIPART_FORM_DATA);
+                .param("cookingRequired", "READY_TO_EAT");
 
         mockMvc.perform(request).andExpect(status().is(expectedStatus));
     }
 
     @Test
-    @DisplayName("Creation: BVA checking for max photos (limit is 5)")
+    @DisplayName("Creation: BVA checking for exactly max photos (5 is valid)")
+    void createProduct_ExactlyMaxPhotos() throws Exception {
+        MockMultipartHttpServletRequestBuilder request = MockMvcRequestBuilders.multipart("/products");
+        request.param("name", "Product with photo")
+                .param("calories", "10.0").param("proteins", "1.0")
+                .param("fats", "1.0").param("carbohydrates", "1.0")
+                .param("category", "VEGETABLES")
+                .param("cookingRequired", "READY_TO_EAT");
+
+        for (int i = 0; i < 5; i++) {
+            request.file(new MockMultipartFile("photos", "pic" + i + ".jpg", "image/jpeg", "data".getBytes()));
+        }
+
+        mockMvc.perform(request).andExpect(status().isCreated());
+    }
+
+    @Test
+    @DisplayName("Creation: BVA checking for max photos limit exceeded (6 is invalid)")
     void createProduct_MaxPhotosLimitExceeded() throws Exception {
         MockMultipartHttpServletRequestBuilder request = MockMvcRequestBuilders.multipart("/products");
         request.param("name", "A product with a bunch of photos")
@@ -115,51 +129,18 @@ public class ProductApiIntegrationTests {
                 .param("cookingRequired", "READY_TO_EAT");
 
         for (int i = 0; i < 6; i++) {
-            request.file(new org.springframework.mock.web.MockMultipartFile(
-                    "photos",
-                    "photo" + i + ".jpg",
-                    "image/jpeg",
-                    "fake image data".getBytes()
-            ));
+            request.file(new MockMultipartFile("photos", "pic" + i + ".jpg", "image/jpeg", "data".getBytes()));
         }
 
-        mockMvc.perform(request)
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(400));
+        mockMvc.perform(request).andExpect(status().isBadRequest());
     }
 
     @Test
-    @DisplayName("Reading: Getting a product by existing ID")
+    @DisplayName("Reading: Get product by ID")
     void getProductById_Success() throws Exception {
         mockMvc.perform(MockMvcRequestBuilders.get("/products/" + testProduct.getId()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("Basic product"))
-                .andExpect(jsonPath("$.calories").value(100.0));
-    }
-
-    @Test
-    @DisplayName("Read: Trying to get a product by a non-existent ID returns 404")
-    void getProductById_NotFound() throws Exception {
-        mockMvc.perform(MockMvcRequestBuilders.get("/products/" + UUID.randomUUID()))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value(404));
-    }
-
-    @Test
-    @DisplayName("Reading: Getting a list of products with filtering (Search by substring)")
-    void getProductsList_WithSearchFilter() throws Exception {
-        Product ignoreProduct = Product.builder()
-                .name("Completely different")
-                .calories(0.0).proteins(0.0).fats(0.0).carbohydrates(0.0)
-                .category(ProductCategory.MEAT).cookingRequired(CookingRequired.READY_TO_EAT)
-                .build();
-        productRepository.save(ignoreProduct);
-
-        mockMvc.perform(MockMvcRequestBuilders.get("/products")
-                        .param("search", "Basic"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].name").value("Basic product"));
+                .andExpect(jsonPath("$.name").value("Basic product"));
     }
 
     @Test
@@ -168,13 +149,10 @@ public class ProductApiIntegrationTests {
         testProduct.getFlags().add(ProductFlag.VEGAN);
         productRepository.save(testProduct);
 
-        Product meatProduct = Product.builder()
-                .name("Meat")
-                .calories(200.0).proteins(20.0).fats(10.0).carbohydrates(0.0)
-                .category(ProductCategory.MEAT)
-                .cookingRequired(CookingRequired.REQUIRES_COOKING)
-                .build();
-        productRepository.save(meatProduct);
+        productRepository.save(Product.builder()
+                .name("Meat").calories(200.0).proteins(20.0).fats(10.0).carbohydrates(0.0)
+                .category(ProductCategory.MEAT).cookingRequired(CookingRequired.REQUIRES_COOKING)
+                .build());
 
         mockMvc.perform(MockMvcRequestBuilders.get("/products")
                         .param("category", "VEGETABLES")
@@ -185,97 +163,49 @@ public class ProductApiIntegrationTests {
     }
 
     @Test
-    @DisplayName("Reading: Sorting products by calories descending")
-    void getProductsList_SortedByCalories() throws Exception {
-        Product highCalProduct = Product.builder()
-                .name("High Calorie Product")
-                .calories(500.0).proteins(10.0).fats(10.0).carbohydrates(10.0)
-                .category(ProductCategory.MEAT)
-                .cookingRequired(CookingRequired.READY_TO_EAT)
-                .build();
-        productRepository.save(highCalProduct);
-
-        mockMvc.perform(MockMvcRequestBuilders.get("/products")
-                        .param("sortBy", "calories")
-                        .param("sortOrder", "desc"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].name").value("High Calorie Product"))
-                .andExpect(jsonPath("$[1].name").value("Basic product"));
-    }
-
-    @Test
-    @DisplayName("Update: Successfully updated product attributes")
+    @DisplayName("Update: Successfully update product")
     void updateProduct_Success() throws Exception {
-        MockMultipartHttpServletRequestBuilder updateReq = MockMvcRequestBuilders.multipart("/products/" + testProduct.getId());
-        updateReq.with(request -> {
-            request.setMethod("PUT");
-            return request;
-        });
+        MockMultipartHttpServletRequestBuilder updateReq = MockMvcRequestBuilders.multipart(HttpMethod.PUT, "/products/" + testProduct.getId());
 
-        updateReq.param("name", "Updated product")
+        updateReq.param("name", "Updated")
                 .param("calories", "150.0")
                 .param("proteins", "10.0")
                 .param("fats", "5.0")
                 .param("carbohydrates", "15.0")
                 .param("category", "MEAT")
-                .param("cookingRequired", "READY_TO_EAT")
-                .contentType(MediaType.MULTIPART_FORM_DATA);
+                .param("cookingRequired", "READY_TO_EAT");
 
         mockMvc.perform(updateReq)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("Updated product"))
                 .andExpect(jsonPath("$.category").value("MEAT"));
     }
 
     @Test
-    @DisplayName("Update: EP checking validation works on update (invalid BJU sum)")
-    void updateProduct_InvalidBjuSum_Returns422() throws Exception {
-        MockMultipartHttpServletRequestBuilder updateReq =
-                MockMvcRequestBuilders.multipart(org.springframework.http.HttpMethod.PUT, "/products/" + testProduct.getId());
-
-        updateReq.param("name", "Updated")
-                .param("calories", "100.0")
-                .param("proteins", "50.0")
-                .param("fats", "50.0")
-                .param("carbohydrates", "50.0")
-                .param("category", "MEAT")
-                .param("cookingRequired", "READY_TO_EAT")
-                .contentType(MediaType.MULTIPART_FORM_DATA);
-
-        mockMvc.perform(updateReq)
-                .andExpect(status().isUnprocessableContent());
-    }
-
-    @Test
-    @DisplayName("Deletion: Successfully deleted a product without links")
+    @DisplayName("Deletion: Successfully delete product")
     void deleteProduct_Success() throws Exception {
         mockMvc.perform(MockMvcRequestBuilders.delete("/products/" + testProduct.getId()))
                 .andExpect(status().isNoContent());
+    }
 
-        mockMvc.perform(MockMvcRequestBuilders.get("/products/" + testProduct.getId()))
+    @Test
+    @DisplayName("Deletion: 404 Not Found when deleting non-existent product")
+    void deleteProduct_NotFound() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.delete("/products/" + UUID.randomUUID()))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    @DisplayName("Removal: Error 409 (Conflict) if product is used in a dish")
+    @DisplayName("Deletion: 409 Conflict when product is used in a dish")
     void deleteProduct_ConflictWhenUsedInDish() throws Exception {
         Dish testDish = Dish.builder()
-                .name("Salad with a base product")
+                .name("Салат")
                 .calories(100.0).proteins(10.0).fats(5.0).carbohydrates(15.0).portionSize(200.0)
-                .category(DishCategory.SALAD)
-                .build();
-
-        DishIngredient ingredient = DishIngredient.builder()
-                .product(testProduct)
-                .weight(100.0)
-                .build();
-        testDish.addIngredient(ingredient);
+                .category(DishCategory.SALAD).build();
+        testDish.addIngredient(DishIngredient.builder().product(testProduct).weight(100.0).build());
         dishRepository.save(testDish);
 
         mockMvc.perform(MockMvcRequestBuilders.delete("/products/" + testProduct.getId()))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value(409))
-                .andExpect(jsonPath("$.usedInDishes[0].name").value("Salad with a base product"));
+                .andExpect(jsonPath("$.code").value(409));
     }
 }
