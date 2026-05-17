@@ -1,4 +1,4 @@
-package ru.nu1ts.recipebook;
+package ru.nu1ts.recipebook.unit.service;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -59,7 +59,6 @@ class DishServiceTests {
                 .build();
     }
 
-    // Techniques applied: Equivalence Partitioning and Boundary Value Analysis
     @ParameterizedTest(name = "Weight: {0}g -> Expected: Cal:{1}, Prot:{2}, Fat:{3}, Carb:{4}")
     @CsvSource({
             "100.0,   250.0,  10.0,    5.0,   40.0",   // EP: Standard portion (multiplier 1.0)
@@ -121,7 +120,7 @@ class DishServiceTests {
         UUID p2Id = UUID.randomUUID();
         Product p2 = Product.builder()
                 .id(p2Id).calories(0.0).proteins(0.0).fats(0.0).carbohydrates(0.0)
-                .flags(List.of(ProductFlag.VEGAN)) // Only VEGAN, no GLUTEN_FREE
+                .flags(List.of(ProductFlag.VEGAN))
                 .build();
 
         when(productRepository.findById(validProductId)).thenReturn(Optional.of(defaultProduct));
