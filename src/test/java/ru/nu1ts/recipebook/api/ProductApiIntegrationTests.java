@@ -144,8 +144,18 @@ public class ProductApiIntegrationTests {
     }
 
     @Test
-    @DisplayName("Reading: Filter products by category and flags")
-    void getProductsList_WithCategoryAndFlagFilters() throws Exception {
+    @DisplayName("Reading: Case-insensitive search by substring")
+    void getProductsList_CaseInsensitiveSearch() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.get("/products")
+                        .param("search", "basic"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("Basic product"));
+    }
+
+    @Test
+    @DisplayName("Reading: Filter products by category, cookingRequired and flags")
+    void getProductsList_WithMultipleFilters() throws Exception {
         testProduct.getFlags().add(ProductFlag.VEGAN);
         productRepository.save(testProduct);
 
@@ -156,18 +166,19 @@ public class ProductApiIntegrationTests {
 
         mockMvc.perform(MockMvcRequestBuilders.get("/products")
                         .param("category", "VEGETABLES")
-                        .param("flags", "VEGAN"))
+                        .param("flags", "VEGAN")
+                        .param("cookingRequired", "READY_TO_EAT"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].name").value("Basic product"));
     }
 
     @Test
-    @DisplayName("Update: Successfully update product")
+    @DisplayName("Update: Successfully update product name and category")
     void updateProduct_Success() throws Exception {
         MockMultipartHttpServletRequestBuilder updateReq = MockMvcRequestBuilders.multipart(HttpMethod.PUT, "/products/" + testProduct.getId());
 
-        updateReq.param("name", "Updated")
+        updateReq.param("name", "Updated Name")
                 .param("calories", "150.0")
                 .param("proteins", "10.0")
                 .param("fats", "5.0")
@@ -177,6 +188,7 @@ public class ProductApiIntegrationTests {
 
         mockMvc.perform(updateReq)
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Updated Name"))
                 .andExpect(jsonPath("$.category").value("MEAT"));
     }
 

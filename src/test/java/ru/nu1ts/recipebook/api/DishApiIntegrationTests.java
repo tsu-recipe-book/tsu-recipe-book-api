@@ -75,8 +75,10 @@ public class DishApiIntegrationTests {
     }
 
     @Test
-    @DisplayName("Macro: !суп in name is removed (category is passed explicitly to satisfy @NotNull)")
+    @DisplayName("Macro: !суп in name is removed (explicit category handles @NotNull validation)")
     void createDish_MacroInName_SetsCategoryAndRemovesMacro() throws Exception {
+        // Так как поле category в DTO помечено аннотацией @NotNull, мы обязаны передать его в запросе.
+        // Настоящая цель этого теста — доказать, что парсер работает и удаляет макрос из названия блюда.
         MockMultipartHttpServletRequestBuilder request = MockMvcRequestBuilders.multipart("/dishes");
         request.param("name", "!суп Борщ")
                 .param("category", "SOUP")
@@ -105,7 +107,7 @@ public class DishApiIntegrationTests {
     }
 
     @Test
-    @DisplayName("Business Logic: duplicate ingredients throw validation error")
+    @DisplayName("Business Logic: duplicate ingredients throw validation error (422 Unprocessable Entity)")
     void createDish_DuplicateIngredients_ReturnsBadRequest() throws Exception {
         MockMultipartHttpServletRequestBuilder request = MockMvcRequestBuilders.multipart("/dishes");
         request.param("name", "Duplicates")
@@ -116,7 +118,7 @@ public class DishApiIntegrationTests {
                 .param("ingredients[1].weight", "50.0");
 
         mockMvc.perform(request)
-                .andExpect(status().is4xxClientError());
+                .andExpect(status().isUnprocessableContent());
     }
 
     @DisplayName("Creation: BVA checking for dish name length")
@@ -140,9 +142,9 @@ public class DishApiIntegrationTests {
     @ParameterizedTest(name = "Calories={0}, Portion={1}, Weight={2} -> Status: {3}")
     @CsvSource({
             "0.0, 100.0, 100.0, 201",   // BVA: Calories at the lower limit (0)
-            "-1.0, 100.0, 100.0, 400",  // BVA: Calories Below Limit (< 0)
+            "-1.0, 100.0, 100.0, 400",  // BVA: Calories Below Limit
             "150.0, 0.0, 100.0, 400",   // BVA: Portion at invalid boundary (0)
-            "150.0, 0.001, 0.001, 201", // BVA: Serving size is strictly greater than zero.
+            "150.0, 0.001, 0.001, 201", // BVA: Portion strictly > 0. Weight proportional to avoid nutrient density explosion
             "150.0, 250.0, 100.0, 201"  // EP: Regular valid values
     })
     void createDish_NumericValuesValidation(String calories, String portion, String weight, int expectedStatus) throws Exception {
@@ -190,10 +192,10 @@ public class DishApiIntegrationTests {
     }
 
     @Test
-    @DisplayName("Reading: Dish search by substring")
+    @DisplayName("Reading: Case-insensitive dish search by substring")
     void getDishes_SearchBySubstring() throws Exception {
         mockMvc.perform(MockMvcRequestBuilders.get("/dishes")
-                        .param("search", "Basic"))
+                        .param("search", "basic"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].name").value("Basic dish"));
@@ -214,6 +216,24 @@ public class DishApiIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].name").value("Big Dish"))
                 .andExpect(jsonPath("$[1].name").value("Basic dish"));
+    }
+
+    @Test
+    @DisplayName("Reading: Filter dishes by category and flags")
+    void getDishes_WithFilters() throws Exception {
+        Dish veganDish = Dish.builder()
+                .name("Vegan soup").category(DishCategory.SOUP)
+                .calories(150.0).proteins(5.0).fats(5.0).carbohydrates(20.0).portionSize(300.0)
+                .build();
+        veganDish.addIngredient(DishIngredient.builder().product(veganProduct).weight(100.0).build());
+        dishRepository.save(veganDish);
+
+        mockMvc.perform(MockMvcRequestBuilders.get("/dishes")
+                        .param("category", "SOUP")
+                        .param("flags", "VEGAN"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("Vegan soup"));
     }
 
     @Test
