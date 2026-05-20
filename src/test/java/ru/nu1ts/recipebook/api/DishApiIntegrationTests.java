@@ -37,12 +37,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 // properties = ... перенаправляет сохранение файлов в отдельную папку для тестов (изоляция файловой системы).
+// webEnvironment = MOCK гарантирует, что имитация HTTP-запроса и реальная бизнес-логика выполняются в одном и том же потоке (используется по умолчанию, если ничего не указывать)
+// Если использовать RANDOM_PORT, сервер запустится в отдельном потоке, и @Transactional не сможет откатить (rollback) мусор в БД после теста.
 @SpringBootTest(properties = {"app.upload.upload-dir=test-uploads"}, webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 @Transactional
 @DisplayName("API Tests: Dish Management (CRUD)")
 public class DishApiIntegrationTests {
 
+    // Позволяет отправлять имитированные HTTP-запросы (GET, POST и т.д.) и проверять ответы (статусы, JSON-тело) без запуска реального веб-сервера
     @Autowired
     private MockMvc mockMvc;
 
