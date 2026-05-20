@@ -24,6 +24,11 @@ spring:
       max-file-size: ${MAX_FILE_SIZE:10MB}
       max-request-size: ${MAX_REQUEST_SIZE:50MB}
 
+  docker:
+    compose:
+      skip:
+        in-tests: false
+
 springdoc:
   api-docs:
     path: /api-docs
