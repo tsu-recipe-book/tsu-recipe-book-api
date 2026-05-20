@@ -56,6 +56,16 @@ jobs:
             ${{ env.DOCKER_IMAGE }}:latest
             ${{ env.DOCKER_IMAGE }}:${{ github.run_number }}
 
+      - name: 📁 Copy compose prod file to server
+        if: github.ref == 'refs/heads/main'
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ env.DEPLOY_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "compose.prod.yaml"
+          target: "/home/${{ env.DEPLOY_USERNAME }}/tsu-recipe-book-api/"
+
       - name: 🚀 Deploy to Server (SSH)
         if: github.ref == 'refs/heads/main'
         uses: appleboy/ssh-action@v1.0.3
@@ -65,34 +75,22 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
+            cd /home/${{ env.DEPLOY_USERNAME }}/tsu-recipe-book-api/
             
-            NETWORK_NAME=${{ env.DEPLOY_USERNAME }}_recipe_net
+            echo "🔐 Generating .env file from secrets..."
+            echo "POSTGRES_DB=${{ secrets.DB_NAME }}" > .env
+            echo "POSTGRES_USER=${{ secrets.DB_USER }}" >> .env
+            echo "POSTGRES_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+            echo "DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}" >> .env
             
-            echo "🔍 Ensure Docker network exists..."
-            if ! docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
-              echo "🌐 Network $NETWORK_NAME not found. Creating..."
-              docker network create "$NETWORK_NAME"
-            else
-              echo "🌐 Network $NETWORK_NAME already exists."
-            fi
+            echo "📥 Pulling latest images..."
+            docker compose -f compose.prod.yaml pull api
             
-            echo "📦 Save previous container as a backup..."
-            docker tag recipe-book-api recipe-book-api-backup || true
+            echo "🚀 Starting containers..."
+            docker compose -f compose.prod.yaml up -d
             
-            echo "📥 Pull last image..."
-            docker pull ${{ env.DOCKER_IMAGE }}:latest
-            
-            echo "🛑 Stopping and deleting current container..."
-            docker stop recipe-book-api || true
-            docker rm recipe-book-api || true
-            
-            echo "🚀 Launching a new container..."
-            docker run -d --name recipe-book-api \
-              -p 8081:8080 \
-              -v recipe_book_uploads:/app/uploads \
-              --env-file /home/${{ env.DEPLOY_USERNAME }}/tsu-recipe-book-api/${{ env.SERVICE_NAME }}.env \
-              --network "$NETWORK_NAME" \
-              ${{ env.DOCKER_IMAGE }}:latest
+            echo "🧹 Cleaning up old images..."
+            docker image prune -f
 
       - name: 🛠 Rollback
         if: failure() && github.ref == 'refs/heads/main'
@@ -102,12 +100,6 @@ jobs:
           username: ${{ env.DEPLOY_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            echo "⚠️ Deployment error. Rollback..."
-            docker stop recipe-book-api || true
-            docker rm recipe-book-api || true
-            docker run -d --name recipe-book-api \
-              -p 8081:8080 \
-              -v recipe_book_uploads:/app/uploads \
-              --env-file /home/${{ env.DEPLOY_USERNAME }}/tsu-recipe-book-api/${{ env.SERVICE_NAME }}.env \
-              --network ${{ env.DEPLOY_USERNAME }}_recipe_net \
-              recipe-book-api-backup
+            echo "⚠️ Deployment error. Ensuring current infrastructure is up..."
+            cd /home/${{ env.DEPLOY_USERNAME }}/tsu-recipe-book-api/
+            docker compose -f compose.prod.yaml up -d
