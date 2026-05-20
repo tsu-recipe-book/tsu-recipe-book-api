@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: recipe_book_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - '5432:5432'
+    volumes:
+      - recipe_book_postgres_data:/var/lib/postgresql/data
+
+  api:
+    image: ${DOCKER_USERNAME}/tsu-recipe-book-api:latest
+    container_name: recipe-book-api
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "8081:8080"
+    volumes:
+      - recipe_book_uploads:/app/uploads
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      UPLOAD_DIR: /app/uploads
+    env_file:
+      - .env
+
+volumes:
+  recipe_book_postgres_data:
+  recipe_book_uploads:
